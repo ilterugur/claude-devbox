@@ -1,0 +1,16 @@
+{
+  "//": "Box-PORTABLE settings example. Copy to claude-config/shared/settings.json, edit, then deploy with claude_sync_settings: true. Keep ABSOLUTE macOS paths, ANTHROPIC_BASE_URL, and local-binary hook commands OUT of this file (see docs/config-sync.md).",
+  "model": "claude-opus-4-8",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(bun install)",
+      "Bash(bun run:*)"
+    ],
+    "deny": []
+  },
+  "enabledPlugins": [],
+  "extraKnownMarketplaces": {},
+  "//hooks": "If you want hooks, reference scripts under $CLAUDE_CONFIG_DIR/hooks (copied alongside this file). On the box $CLAUDE_CONFIG_DIR resolves to each profile's ~/.claude (i.e. /home/<profile>/.claude), so use $CLAUDE_CONFIG_DIR/hooks/<script> or a $PATH-resolved binary — never /Users/... or /opt/homebrew/... And make sure any binary they call (your custom CLIs) is installed on the box."
+}

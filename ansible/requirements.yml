@@ -1,0 +1,5 @@
+---
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix # authorized_key, mount (fstab swap)
+  - name: community.general # ufw

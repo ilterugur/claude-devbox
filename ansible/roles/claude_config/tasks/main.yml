@@ -1,0 +1,63 @@
+---
+- name: Check for a curated shared-config source on the laptop
+  ansible.builtin.stat:
+    path: "{{ claude_config_src }}"
+  delegate_to: localhost
+  become: false
+  register: cfg_src
+
+- name: Note when there is nothing to sync
+  ansible.builtin.debug:
+    msg: >-
+      sync_claude_config is on but {{ claude_config_src }} doesn't exist yet —
+      run scripts/bundle-local-config.sh first. Skipping config sync.
+  when: sync_claude_config | bool and not (cfg_src.stat.exists | default(false))
+
+- name: Ensure shared config dir + the devbox share dir exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/claude-shared
+    - /usr/local/share/claude-devbox
+  when: sync_claude_config | bool
+
+- name: Deploy the shared exclude list
+  ansible.builtin.copy:
+    src: sync-excludes.txt
+    dest: /usr/local/share/claude-devbox/sync-excludes.txt
+    owner: root
+    group: root
+    mode: "0644"
+  when: sync_claude_config | bool
+
+- name: Push curated config (laptop -> box)
+  ansible.posix.synchronize:
+    src: "{{ claude_config_src }}/"
+    dest: /opt/claude-shared/
+    archive: true
+    delete: false
+    rsync_opts:
+      - "--exclude-from={{ role_path }}/files/sync-excludes.txt"
+  when: sync_claude_config | bool and (cfg_src.stat.isdir | default(false))
+
+- name: Deploy config-apply helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/claude-config-apply.sh"
+    dest: /usr/local/bin/claude-config-apply
+    owner: root
+    group: root
+    mode: "0755"
+  when: sync_claude_config | bool
+
+- name: Fan shared config into each profile (never touches credentials/identity)
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/bin/claude-config-apply
+      {{ '--with-settings' if claude_sync_settings | bool else '' }}
+      {{ profiles | map(attribute='user') | join(' ') }}
+  when: sync_claude_config | bool and cfg_src.stat.exists | default(false)
+  changed_when: true

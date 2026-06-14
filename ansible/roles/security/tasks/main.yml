@@ -1,0 +1,72 @@
+---
+# Hardening order is deliberate: the operator key is proven to work BEFORE root
+# login is disabled, the drop-in is syntax-validated before it lands, and sshd
+# is restarted only via a handler at the very end of the play.
+
+- name: Pre-flight — confirm operator can log in with key before hardening
+  ansible.builtin.command:
+    cmd: >-
+      ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+      -o ConnectTimeout=15 -i {{ operator_private_key_path }}
+      {{ operator_user }}@{{ ansible_host }} true
+  delegate_to: localhost
+  become: false
+  register: _ssh_probe
+  until: _ssh_probe.rc == 0
+  retries: 5
+  delay: 3
+  changed_when: false
+
+- name: Pre-flight — confirm operator has working passwordless sudo
+  ansible.builtin.command:
+    cmd: >-
+      ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+      -o ConnectTimeout=15 -i {{ operator_private_key_path }}
+      {{ operator_user }}@{{ ansible_host }} sudo -n true
+  delegate_to: localhost
+  become: false
+  register: _sudo_probe
+  until: _sudo_probe.rc == 0
+  retries: 5
+  delay: 3
+  changed_when: false
+  # If this fails, the operator can't sudo — abort before locking out root.
+
+- name: Deploy sshd hardening drop-in
+  ansible.builtin.template:
+    src: 99-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Restart sshd
+
+- name: Apply the sshd restart now (current connection survives it)
+  ansible.builtin.meta: flush_handlers
+
+# ── UFW — allow SSH BEFORE enabling, or you lock yourself out ─────────────────
+- name: Allow OpenSSH through UFW
+  community.general.ufw:
+    rule: allow
+    name: OpenSSH
+
+- name: Default deny incoming
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started

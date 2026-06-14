@@ -1,0 +1,86 @@
+---
+# ============================================================================
+#  claude-devbox configuration  —  copy to all.yml (gitignored) and edit.
+#
+#    cp group_vars/all.example.yml group_vars/all.yml
+#
+#  v2 model: each PROFILE is its own Linux user — isolated $HOME, SSH key, git
+#  identity, Claude login, and always-on Remote Control servers. Runtimes are
+#  installed once (via mise) and shared. The one manual step is a `/login` per
+#  profile (Remote Control needs interactive OAuth) — see docs/multi-account.md.
+# ============================================================================
+
+# ── Admin user (Ansible connects as this; has sudo). NOT a Claude profile. ────
+operator_user: admin
+operator_ssh_pubkey: "ssh-ed25519 AAAA...REPLACE_ME you@laptop"
+operator_private_key_path: "~/.ssh/id_ed25519" # for the pre-hardening probe
+
+# ── Box tuning ────────────────────────────────────────────────────────────────
+swap_file: /swapfile
+swap_size: 4G
+
+# ── Private networking ────────────────────────────────────────────────────────
+# Use a REUSABLE, NON-ephemeral key (https://login.tailscale.com/admin/settings/keys).
+tailscale_authkey: "tskey-auth-REPLACE_ME"
+
+# ── Runtimes (installed ONCE via mise, shared by all profiles) ────────────────
+#  Tools resolve on every profile's PATH — including Claude's non-interactive
+#  Bash tool — via /opt/mise/shims. Set a version, "lts", or "latest".
+runtimes:
+  node: "lts"
+  python: "3.12"
+  bun: "latest"
+  uv: "latest"
+
+# ── Profiles ──────────────────────────────────────────────────────────────────
+#  Each profile = one Linux user = one Claude account = one git identity.
+#  IMPORTANT — read docs/multi-account.md: use separate profiles only for
+#  accounts you SEPARATELY and LEGITIMATELY pay for. Not for dodging rate limits.
+profiles:
+  - user: work # Linux username for this profile
+    git_name: "Your Name"
+    git_email: "you@work.example"
+    # An ed25519 SSH key is generated at /home/work/.ssh/id_ed25519 — add the
+    # printed PUBLIC key to THIS profile's GitHub account (docs/multi-project.md).
+    projects:
+      - name: app
+        repo: "git@github.com:work-org/app.git"
+        branch: main
+        install: true # run `bun install` after clone
+        update: false # don't git-pull over Claude's local edits
+        ports: [5173, 3000]
+    servers: # always-on Remote Control servers (one per project) for the phone
+      - project: app
+        name: "Work · app" # title shown in the phone app
+        spawn: worktree # worktree | same-dir | session
+        capacity: 4 # Claude's flag default is 32; 4 is gentler on RAM
+
+  # - user: personal
+  #   git_name: "Your Name"
+  #   git_email: "you@personal.example"
+  #   projects:
+  #     - { name: side, repo: "git@github.com:me/side.git", branch: main }
+  #   servers:
+  #     - { project: side, name: "Personal · side", spawn: worktree, capacity: 2 }
+
+# ── Claude config sync (skills / agents / commands / CLAUDE.md / mcp.json) ─────
+#  Mirrors a CURATED, portable subset of your local ~/.claude and copies it into
+#  EVERY profile's ~/.claude — never touching per-profile identity. Run
+#  scripts/bundle-local-config.sh first. READ docs/config-sync.md.
+sync_claude_config: true
+claude_config_src: "{{ playbook_dir }}/../claude-config/shared"
+claude_sync_settings: false # settings.json/hooks are machine-coupled; opt in
+
+# ── Optional cleanup (all OFF by default) ─────────────────────────────────────
+# Remove superseded mise tool versions after a runtime bump (frees disk):
+mise_prune: false
+# Declarative removal of profiles/servers you DELETED from this file. It NEVER runs
+# on a normal `ansible-playbook playbook.yml` — only via `--tags prune`, which by
+# itself just removes orphaned services (and only ones claude-devbox created). It
+# lists what it will remove and asks for an interactive 'yes' first. The flags below
+# gate the destructive parts:
+prune_removed_users: false # also delete Linux user accounts no longer listed above
+remove_profile_home: false # when deleting a user, also wipe its /home (DESTROYS DATA)
+# prune_assume_yes / prune_force_empty are runtime-only escape hatches (-e ...):
+#   -e prune_assume_yes=true   skip the interactive prompt (for non-interactive runs)
+#   -e prune_force_empty=true  allow removing ALL services when none are declared

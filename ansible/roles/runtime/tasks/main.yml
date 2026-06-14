@@ -1,0 +1,45 @@
+---
+# Install mise + declare the shared toolchain versions. mise itself manages the
+# shell env — we don't hand-maintain PATH. Tools are installed PER PROFILE (in
+# the users role) into each user's own data dir; Claude's non-interactive Bash
+# tool gets them via `mise activate --shims` in the Remote Control wrapper.
+
+- name: Install extrepo (for the official mise apt repo)
+  ansible.builtin.apt:
+    name: [extrepo, gpg]
+    state: present
+    update_cache: true
+
+- name: Enable the mise apt repo via extrepo
+  ansible.builtin.command: extrepo enable mise
+  args:
+    creates: /etc/apt/sources.list.d/extrepo_mise.sources
+
+- name: Install mise
+  ansible.builtin.apt:
+    name: mise
+    state: present
+    update_cache: true
+
+- name: Verify mise installed correctly
+  ansible.builtin.command: mise --version
+  changed_when: false
+
+- name: Declare the shared toolchain versions (system mise config)
+  ansible.builtin.template:
+    src: mise-config.toml.j2
+    dest: /etc/mise/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+
+# Let mise manage the env for interactive/login shells (its own activation).
+- name: Activate mise for interactive shells
+  ansible.builtin.copy:
+    dest: /etc/profile.d/mise.sh
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (claude-devbox) — mise manages the shell env.
+      command -v mise >/dev/null 2>&1 && eval "$(mise activate bash)"

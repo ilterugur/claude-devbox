@@ -1,0 +1,84 @@
+---
+- name: Update apt cache and upgrade packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: dist
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - git
+      - curl
+      - ca-certificates
+      - ufw
+      - fail2ban
+      - tmux
+      - unzip
+      - rsync
+      - build-essential
+      - pkg-config
+    state: present
+
+- name: Create non-root sudo user
+  ansible.builtin.user:
+    name: "{{ operator_user }}"
+    groups: sudo
+    append: true
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Allow operator passwordless sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ operator_user }}"
+    content: "{{ operator_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  no_log: true
+
+- name: Push operator SSH public key
+  ansible.posix.authorized_key:
+    user: "{{ operator_user }}"
+    key: "{{ operator_ssh_pubkey }}"
+    state: present
+    exclusive: false
+
+# ── Swapfile (idempotent) ────────────────────────────────────────────────────
+- name: Allocate swapfile
+  ansible.builtin.command: "fallocate -l {{ swap_size }} {{ swap_file }}"
+  args:
+    creates: "{{ swap_file }}"
+  register: swap_created
+
+- name: Secure swapfile permissions
+  ansible.builtin.file:
+    path: "{{ swap_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Format swapfile
+  ansible.builtin.command: "mkswap {{ swap_file }}"
+  when: swap_created.changed
+  changed_when: true
+
+- name: Persist swap in /etc/fstab
+  ansible.posix.mount:
+    path: none
+    src: "{{ swap_file }}"
+    fstype: swap
+    opts: sw
+    state: present
+
+- name: Get active swap devices
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: active_swap
+  changed_when: false
+
+- name: Enable swap (idempotent — also recovers if it was turned off)
+  ansible.builtin.command: "swapon {{ swap_file }}"
+  when: swap_file not in active_swap.stdout
+  changed_when: true

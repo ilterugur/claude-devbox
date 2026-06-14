@@ -1,0 +1,32 @@
+# Single source of truth for rsync excludes — used by BOTH the laptop->box push
+# (synchronize) AND the box-side per-account apply (claude-config-apply.sh).
+# Never sync: per-account identity, machine/session state, caches, plugin payload.
+# (settings.json is handled separately — it is opt-in via --with-settings.)
+.credentials.json
+.claude.json
+projects/
+sessions/
+session-env/
+todos/
+history.jsonl
+shell-snapshots/
+statsig/
+telemetry/
+cache/
+paste-cache/
+ide/
+debug/
+backups/
+file-history/
+plans/
+jobs/
+tasks/
+daemon/
+plugins/
+*.lock
+*.log
+mcp-needs-auth-cache.json
+stats-cache.json
+.last-cleanup
+.last-update-result.json
+settings.json.bak-*

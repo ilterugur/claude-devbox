@@ -1,0 +1,82 @@
+---
+- name: Clone project repos (as each profile's user, with its own SSH key)
+  ansible.builtin.git:
+    repo: "{{ item.1.repo }}"
+    dest: "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
+    version: "{{ item.1.branch | default('main') }}"
+    update: "{{ item.1.update | default(false) }}" # never clobber Claude's edits
+    accept_hostkey: true
+  become_user: "{{ item.0.user }}"
+  environment:
+    GIT_TERMINAL_PROMPT: "0" # fail fast instead of hanging on private repos
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  register: clone_results
+  failed_when: false # don't abort the whole run if a key isn't on GitHub yet
+
+- name: "Report any clones that failed (usually a missing GitHub SSH key)"
+  ansible.builtin.debug:
+    msg: >-
+      Clone failed for {{ item.item.0.user }}/{{ item.item.1.name }} — add that
+      profile's printed SSH public key to its GitHub account, then re-run.
+  loop: "{{ clone_results.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop_control:
+    label: "{{ item.item.0.user }}/{{ item.item.1.name }}"
+
+- name: Trust each repo's own mise config (so its pinned versions are honored)
+  ansible.builtin.command:
+    cmd: "mise trust /home/{{ item.0.user }}/projects/{{ item.1.name }}"
+  become_user: "{{ item.0.user }}"
+  environment:
+    HOME: "/home/{{ item.0.user }}"
+    MISE_YES: "1"
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+  changed_when: false
+
+- name: Install each repo's pinned toolchain (mise reads the repo's mise.toml/.tool-versions/.nvmrc)
+  ansible.builtin.command:
+    cmd: "mise -C /home/{{ item.0.user }}/projects/{{ item.1.name }} install --yes"
+  become_user: "{{ item.0.user }}"
+  environment:
+    HOME: "/home/{{ item.0.user }}"
+    MISE_YES: "1"
+  register: repo_mise
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+  changed_when: >-
+    (repo_mise.stdout | default('')) is search('install(ing|ed)')
+    or (repo_mise.stderr | default('')) is search('install(ing|ed)')
+
+- name: Install dependencies (bun via mise) per project
+  ansible.builtin.command:
+    cmd: "mise exec -- bun install"
+    chdir: "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
+  become_user: "{{ item.0.user }}"
+  environment:
+    HOME: "/home/{{ item.0.user }}"
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  when:
+    - item.1.install | default(true)
+    - "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+  changed_when: false
+
+- name: Scaffold .env files from .env.example (never overwrites)
+  ansible.builtin.shell:
+    cmd: >-
+      find "/home/{{ item.0.user }}/projects/{{ item.1.name }}" -name '.env.example'
+      -not -path '*/node_modules/*' -print0 |
+      while IFS= read -r -d '' f; do t="${f%.example}"; [ -f "$t" ] || cp "$f" "$t"; done
+  become_user: "{{ item.0.user }}"
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+  changed_when: false

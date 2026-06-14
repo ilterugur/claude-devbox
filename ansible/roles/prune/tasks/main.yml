@@ -1,0 +1,136 @@
+---
+# Declarative cleanup of things removed from `profiles`. OPT-IN — only runs via
+#   ansible-playbook playbook.yml --tags prune
+#
+# Scope: it ONLY ever touches claude-devbox's OWN resources —
+#   * services it created (the `claude-rc-*` naming convention), and
+#   * users it created (the `.claude-devbox-managed` marker file).
+# It will never remove a service or user it didn't add (your admin user, system
+# users, hand-made units are all invisible to it).
+#
+# Safe by default (services only). Deleting users needs -e prune_removed_users=true
+# (homes kept), wiping homes needs -e remove_profile_home=true. It asks for an
+# interactive 'yes' before removing anything, unless -e prune_assume_yes=true.
+
+# ── Discover what's orphaned (OUR resources only) ─────────────────────────────
+- name: Find existing claude-rc unit files (ours, by naming convention)
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "claude-rc-*.service"
+  register: existing_units
+
+- name: Compute the set of declared unit names
+  ansible.builtin.set_fact:
+    declared_units: "{{ declared_units | default([]) + ['claude-rc-' + item.0.user + '-' + item.1.project + '.service'] }}"
+  loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}-{{ item.1.project }}"
+
+- name: Determine orphaned services
+  ansible.builtin.set_fact:
+    orphan_units: "{{ existing_units.files | map(attribute='path') | map('basename') | difference(declared_units | default([])) }}"
+
+- name: Safety — refuse to remove ALL services when none are declared (likely a typo)
+  ansible.builtin.assert:
+    that:
+      - declared_units | default([]) | length > 0
+        or existing_units.files | length == 0
+        or (prune_force_empty | default(false) | bool)
+    fail_msg: >-
+      No servers are declared in `profiles`, but {{ existing_units.files | length }}
+      claude-rc service(s) exist — refusing to remove them all (looks like a dropped
+      `servers:`). If you truly mean to remove every service, pass
+      -e prune_force_empty=true.
+
+- name: Find claude-devbox-managed profile users (marker — ours only)
+  ansible.builtin.find:
+    paths: /home
+    patterns: ".claude-devbox-managed"
+    hidden: true
+    recurse: true
+    depth: 2
+  register: managed_markers
+  when: prune_removed_users | default(false) | bool
+
+- name: Determine orphaned profile users
+  ansible.builtin.set_fact:
+    orphan_users: >-
+      {{ managed_markers.files | map(attribute='path') | map('dirname') | map('basename')
+         | difference(profiles | map(attribute='user') | list) }}
+  when: prune_removed_users | default(false) | bool
+
+- name: Anything to do?
+  ansible.builtin.set_fact:
+    prune_has_work: "{{ (orphan_units | default([]) | length > 0) or (orphan_users | default([]) | length > 0) }}"
+
+- name: Nothing orphaned
+  ansible.builtin.debug:
+    msg: "Nothing to prune — everything on the box matches your profiles."
+  when: not prune_has_work
+
+# ── Confirm before removing anything ──────────────────────────────────────────
+- name: Confirm removal (type 'yes')
+  ansible.builtin.pause:
+    prompt: |
+
+      claude-devbox will REMOVE these orphaned resources:
+
+        Services : {{ orphan_units | default([]) | join(', ') | default('(none)', true) }}
+      {% if prune_removed_users | default(false) | bool %}
+        Users    : {{ orphan_users | default([]) | join(', ') | default('(none)', true) }}  ({{ 'homes WILL BE WIPED' if remove_profile_home | default(false) | bool else 'homes kept' }})
+      {% endif %}
+
+      Type 'yes' to proceed (anything else aborts)
+  register: prune_confirm
+  when:
+    - prune_has_work
+    - not (prune_assume_yes | default(false) | bool)
+
+- name: Decide whether to proceed
+  ansible.builtin.set_fact:
+    prune_go: >-
+      {{ (prune_assume_yes | default(false) | bool)
+         or (prune_confirm.user_input | default('') | trim | lower == 'yes') }}
+
+- name: Aborted
+  ansible.builtin.debug:
+    msg: "Aborted — nothing removed."
+  when: prune_has_work and not prune_go
+
+# ── Remove orphaned services (gated on confirmation) ──────────────────────────
+- name: Stop & disable orphaned services (ExecStop kills their tmux server)
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ orphan_units }}"
+  when: prune_go | bool
+
+- name: Remove orphaned unit files
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: "{{ orphan_units }}"
+  when: prune_go | bool
+  notify: Reload systemd
+
+# ── Remove orphaned users (gated on confirmation + explicit flag) ─────────────
+- name: Remove orphaned user accounts (home KEPT unless remove_profile_home=true)
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: "{{ remove_profile_home | default(false) | bool }}"
+    force: "{{ remove_profile_home | default(false) | bool }}"
+  loop: "{{ orphan_users | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - prune_go | bool
+    - prune_removed_users | default(false) | bool
+
+- name: Summary of what was removed
+  ansible.builtin.debug:
+    msg: >-
+      Removed services: {{ orphan_units | default([]) | join(', ') | default('(none)', true) }}.
+      {% if prune_removed_users | default(false) | bool %}Removed users: {{ orphan_users | default([]) | join(', ') | default('(none)', true) }} ({{ 'homes wiped' if remove_profile_home | default(false) | bool else 'homes kept' }}).{% endif %}
+  when: prune_go | bool

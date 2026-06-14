@@ -1,0 +1,49 @@
+---
+- name: Deploy Remote Control wrapper + loop scripts
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/{{ item }}.sh"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - claude-rc-wrapper
+    - claude-rc-run
+
+- name: Generate a systemd unit per (profile, project)
+  ansible.builtin.template:
+    src: claude-rc.service.j2
+    dest: "/etc/systemd/system/claude-rc-{{ item.0.user }}-{{ item.1.project }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}-{{ item.1.project }}"
+  notify: Reload systemd
+
+- name: Load new units before enabling
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start each Remote Control service
+  ansible.builtin.systemd_service:
+    name: "claude-rc-{{ item.0.user }}-{{ item.1.project }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}-{{ item.1.project }}"
+  # Services self-heal: each polls until its profile is logged in
+  # (run `sudo claude-devbox-login`), then comes online automatically.
+
+- name: Deploy operator helper commands
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/{{ item.src }}"
+    dest: "/usr/local/bin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: claude-devbox-login.sh, dest: claude-devbox-login }
+    - { src: claude-devbox-dev.sh, dest: claude-devbox-dev }

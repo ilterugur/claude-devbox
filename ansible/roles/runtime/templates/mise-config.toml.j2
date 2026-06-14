@@ -1,0 +1,10 @@
+# Managed by Ansible (claude-devbox). Shared toolchain for all profiles.
+[tools]
+{% for tool, version in runtimes.items() %}
+{{ tool }} = "{{ version }}"
+{% endfor %}
+
+[settings]
+# Honor repos that pin versions via .nvmrc / .python-version (these "idiomatic"
+# files are OFF by default in mise). Native mise.toml / .tool-versions always work.
+idiomatic_version_file_enable_tools = ["node", "python"]

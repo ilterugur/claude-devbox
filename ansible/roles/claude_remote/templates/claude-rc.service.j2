@@ -1,0 +1,22 @@
+{# Managed by Ansible (claude-devbox). One unit per (profile, project). #}
+[Unit]
+Description=Claude remote-control ({{ item.0.user }}-{{ item.1.project }})
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User={{ item.0.user }}
+Environment=HOME=/home/{{ item.0.user }}
+Environment=PATH=/home/{{ item.0.user }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=CLAUDE_CONFIG_DIR=/home/{{ item.0.user }}/.claude
+Environment=CLAUDE_RC_PROJECT_DIR=/home/{{ item.0.user }}/projects/{{ item.1.project }}
+Environment=CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}
+Environment=CLAUDE_RC_SPAWN={{ item.1.spawn | default('worktree') }}
+Environment=CLAUDE_RC_CAPACITY={{ item.1.capacity | default(4) }}
+ExecStart=/usr/local/bin/claude-rc-wrapper {{ item.0.user }}-{{ item.1.project }}
+ExecStop=/usr/bin/tmux -L claude-rc-{{ item.0.user }}-{{ item.1.project }} kill-server
+
+[Install]
+WantedBy=multi-user.target

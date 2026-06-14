@@ -1,0 +1,25 @@
+# Real inventory & vars (contain host IPs, SSH info, auth keys) — keep only *.example
+ansible/inventory.ini
+ansible/group_vars/all.yml
+ansible/host_vars/*.yml
+!ansible/host_vars/*.example.yml
+
+# Ansible
+*.retry
+.vault_pass
+*.vault
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Secrets / env
+*.env
+.env
+secrets/

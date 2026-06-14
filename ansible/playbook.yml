@@ -1,0 +1,74 @@
+---
+- name: Provision Claude Code remote dev box
+  hosts: devbox
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Assert required variables are set
+      ansible.builtin.assert:
+        that:
+          - operator_user | default('') | length > 0
+          - operator_ssh_pubkey | default('') is search('ssh-')
+          - tailscale_authkey | default('') is search('tskey-')
+          - profiles | default([]) | length > 0
+        fail_msg: >-
+          Copy group_vars/all.example.yml to all.yml and set operator_user,
+          operator_ssh_pubkey, tailscale_authkey and at least one profile.
+      tags: [always]
+
+    - name: Validate every profile username
+      ansible.builtin.assert:
+        that:
+          - item.user is match('^[a-z_][a-z0-9_-]*$')
+        fail_msg: "profile user '{{ item.user }}' must be a valid Linux username."
+      loop: "{{ profiles }}"
+      loop_control:
+        label: "{{ item.user }}"
+      tags: [always]
+
+    - name: Validate the operator private key exists on this machine
+      ansible.builtin.stat:
+        path: "{{ operator_private_key_path | expanduser }}"
+      delegate_to: localhost
+      become: false
+      register: _opk
+      failed_when: not _opk.stat.exists
+      tags: [always]
+
+    - name: First-run reminder (connected as root)
+      ansible.builtin.debug:
+        msg: >-
+          Connected as root (first-run mode). After this run, root SSH login is
+          disabled — set `ansible_user={{ operator_user }}` in inventory.ini for
+          every later run, or re-runs will fail to connect.
+      when: ansible_user | default('') == 'root'
+      tags: [always]
+
+  # Role tags let you target one thing on an already-provisioned box, e.g.
+  #   ansible-playbook playbook.yml --tags projects     # add/clone a new repo
+  #   ansible-playbook playbook.yml --tags runtime       # bump a runtime version
+  #   ansible-playbook playbook.yml --tags remote        # add a server
+  roles:
+    - { role: base, tags: [base] }
+    - { role: security, tags: [security] }
+    - { role: tailscale, tags: [tailscale] }
+    - { role: docker, tags: [docker] }
+    - { role: runtime, tags: [runtime, mise] }
+    - { role: users, tags: [users, profiles] }
+    - { role: projects, tags: [projects] }
+    - { role: claude_remote, tags: [remote, services] }
+    - { role: claude_config, tags: [config, sync] }
+    # OPT-IN cleanup. `never` keeps it OUT of normal runs entirely — it only runs
+    # when you explicitly ask: `ansible-playbook playbook.yml --tags prune`.
+    - { role: prune, tags: [prune, never] }
+
+  post_tasks:
+    - name: Next steps
+      ansible.builtin.debug:
+        msg: >-
+          Provisioned. NOW: (1) add each profile's printed SSH public key to its
+          GitHub account, (2) `ssh {{ operator_user }}@<box>` then
+          `sudo claude-devbox-login` to do one /login per profile. The always-on
+          servers come online automatically once logged in.
+      tags: [always]
