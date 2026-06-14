@@ -116,12 +116,25 @@ next. Note any clone that failed (that's expected if a key isn't on GitHub yet).
 These can't be fully automated; walk the user through them:
 
 1. **Add each profile's SSH public key to *that profile's* GitHub account** (the keys
-   from Step 5). If `gh` is installed and the user confirms, you may offer to add a
-   key via `gh` — but adding an SSH key changes GitHub account settings, so confirm
-   each one, make sure the correct account is active, and **never** do this for an
-   account that isn't the user's. Otherwise give the exact manual steps
-   (Settings → SSH and GPG keys → New SSH key). Then **re-run the playbook** to clone
-   any repos that failed the first pass.
+   from Step 5), then verify access *before* re-running so the clone can't fail twice.
+   - **One key per profile, reused across all its repos.** The keypair is generated
+     once per profile (`/home/<user>/.ssh/id_ed25519`, guarded by `creates:`), so the
+     SAME key serves every project that profile clones. You add it to GitHub **once**
+     per profile — adding more projects to an existing profile needs **no** new key.
+     Only a brand-new *profile* generates (and needs you to add) a new key.
+   - **Prefer the proactive `gh` path** when `gh` is installed and the user confirms:
+     for each profile's repo, first check the active account can reach it —
+     `gh api user -q .login` (is this the profile's intended GitHub identity?) and
+     `gh repo view <owner/repo> --json viewerPermission` (does it return access, not
+     404?). If good, add the key with `gh ssh-key add <pubfile> --title claude-devbox-<user>`
+     and re-check `gh repo view`. Adding an SSH key changes GitHub account settings, so
+     confirm each one, make sure the correct account is active, and **never** do this
+     for an account that isn't the user's. Doing this access check up front means you
+     know the next playbook run will clone cleanly instead of waiting for it to fail.
+   - Otherwise give the exact manual steps (Settings → SSH and GPG keys → New SSH key).
+   - The first run's clone is non-fatal (`failed_when: false`) — it just skips and the
+     `claude-rc-*` service polls until the repo appears. After the key is on GitHub and
+     `gh repo view` confirms access, **re-run the playbook** to clone + `bun install`.
 2. **Switch `inventory.ini`** `ansible_user` to the `operator_user` for all future
    runs (root login is now disabled).
 3. **One `/login` per profile** — Remote Control needs interactive OAuth:
@@ -147,9 +160,13 @@ These can't be fully automated; walk the user through them:
 
 ## Adding a profile / project / runtime later
 
-Edit `group_vars/all.yml`, re-run the playbook (idempotent). A new profile prints a
-new SSH key (add it to GitHub) and needs its own `/login`; a new `servers` entry
-brings up its `claude-rc-*` service.
+Edit `group_vars/all.yml`, re-run the playbook (idempotent). A new **profile** prints
+a new SSH key (add it to GitHub once) and needs its own `/login`. A new **project**
+under an *existing* profile reuses that profile's key — **no new GitHub key** — just
+make sure the profile's account can reach the new repo (`gh repo view`). A new
+`servers` entry brings up its own `claude-rc-<user>-<project>` service (services are
+per-profile-per-project: one always-on Remote Control server per project, which is the
+right granularity — you attach to each project independently from the phone).
 
 ## Secrets & safety (non-negotiable)
 
