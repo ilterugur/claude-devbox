@@ -27,8 +27,11 @@ for u in "${users[@]}"; do
    -> then type  /exit
 ========================================================
 EOF
+  # cd into the profile's own HOME first: sudo keeps the caller's cwd (e.g.
+  # /home/admin), which the profile user can't enter — that breaks the shell and
+  # makes /doctor read the wrong project's settings (EACCES). -H sets HOME.
   sudo -u "${u}" -H bash -lc \
-    'env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN "$HOME/.local/bin/claude"'
+    'cd "$HOME" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN "$HOME/.local/bin/claude"'
 done
 
 echo
