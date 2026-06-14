@@ -149,11 +149,14 @@ These can't be fully automated; walk the user through them:
 
 - Check services: `ssh <operator>@<box> "systemctl status 'claude-rc-*' --no-pager"`
   (or `scripts/connect.sh status` with `DEVBOX_HOST` set).
-- **Register the box in the user's editors:** run
-  `python3 scripts/gen-editor-config.py` — it writes a `~/.ssh/config` block per
-  profile (VS Code / Cursor Remote-SSH, plain ssh, Zed) and Zed `ssh_connections`
-  pre-listing each profile's projects. (It backs up and only edits its own managed
-  block; if Zed's settings has comments it prints the snippet to paste instead.)
+- **Register the box as an SSH host (so the Claude desktop app + editors see it):**
+  run `python3 scripts/gen-editor-config.py`. It **idempotently adds a `Host
+  devbox-<user>` block per profile to `~/.ssh/config` if not already present** (its own
+  managed block, backed up first) — that's the SSH-host entry the **Claude desktop app**,
+  VS Code / Cursor Remote-SSH, plain `ssh`, and Zed all read. For Zed it also merges an
+  `ssh_connections` entry pre-listing each profile's projects (if Zed's settings has
+  comments it prints the snippet to paste instead — paste it yourself). Re-running is
+  safe: existing blocks are updated in place, not duplicated.
 - Point the user to daily use: connect the **desktop app / VS Code Remote-SSH /
   Zed as a profile** (e.g. `devbox-work`), drive from the **mobile app** per
   profile, and preview dev servers (`docs/realtime-sync.md`, `docs/mobile.md`).
