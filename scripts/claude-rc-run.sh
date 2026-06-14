@@ -14,7 +14,11 @@ command -v mise >/dev/null 2>&1 && eval "$(mise activate bash --shims)" || true
 command -v node >/dev/null 2>&1 || \
   echo "[claude-rc] WARNING: toolchain (node) not on PATH — check 'mise ls' for $(whoami)" >&2
 
-CFG="${CLAUDE_CONFIG_DIR:?CLAUDE_CONFIG_DIR not set}"
+# Where Claude keeps credentials. Default to ~/.claude so we match Claude's own
+# default layout (config at ~/.claude.json, creds at ~/.claude/.credentials.json) —
+# the same location `claude-devbox-login` and interactive sessions use. Don't force
+# CLAUDE_CONFIG_DIR onto the claude process, or it looks for config in the wrong place.
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 DIR="${CLAUDE_RC_PROJECT_DIR:?CLAUDE_RC_PROJECT_DIR not set}"
 NAME="${CLAUDE_RC_NAME:-claude}"
 SPAWN="${CLAUDE_RC_SPAWN:-worktree}"

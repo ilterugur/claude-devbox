@@ -10,7 +10,10 @@ RemainAfterExit=yes
 User={{ item.0.user }}
 Environment=HOME=/home/{{ item.0.user }}
 Environment=PATH=/home/{{ item.0.user }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=CLAUDE_CONFIG_DIR=/home/{{ item.0.user }}/.claude
+{# Do NOT set CLAUDE_CONFIG_DIR: it would make claude look for config at
+   ~/.claude/.claude.json, but login + interactive sessions use Claude's default
+   (~/.claude.json in HOME). The run script defaults its credential-check path to
+   ~/.claude on its own. #}
 Environment=CLAUDE_RC_PROJECT_DIR=/home/{{ item.0.user }}/projects/{{ item.1.project }}
 Environment=CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}
 Environment=CLAUDE_RC_SPAWN={{ item.1.spawn | default('worktree') }}
