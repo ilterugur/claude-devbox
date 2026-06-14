@@ -4,7 +4,7 @@
     repo: "{{ item.1.repo }}"
     dest: "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
     version: "{{ item.1.branch | default('main') }}"
-    update: "{{ item.1.update | default(false) }}" # never clobber Claude's edits
+    update: "{{ item.1['update'] | default(false) }}" # never clobber Claude's edits
     accept_hostkey: true
   become_user: "{{ item.0.user }}"
   environment:
@@ -24,6 +24,17 @@
   loop_control:
     label: "{{ item.item.0.user }}/{{ item.item.1.name }}"
 
+# Gate the post-clone steps on a REAL remote check (the `exists` Jinja test runs
+# on the controller, not the box, so it can't be used to detect a remote clone).
+- name: Check which project repos are present on the box
+  ansible.builtin.stat:
+    path: "/home/{{ item.0.user }}/projects/{{ item.1.name }}/.git"
+  become_user: "{{ item.0.user }}"
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+  register: repo_git
+
 - name: Trust each repo's own mise config (so its pinned versions are honored)
   ansible.builtin.command:
     cmd: "mise trust /home/{{ item.0.user }}/projects/{{ item.1.name }}"
@@ -34,7 +45,8 @@
   loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.user }}/{{ item.1.name }}"
-  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+    index_var: ridx
+  when: repo_git.results[ridx].stat.exists
   changed_when: false
 
 - name: Install each repo's pinned toolchain (mise reads the repo's mise.toml/.tool-versions/.nvmrc)
@@ -48,7 +60,8 @@
   loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.user }}/{{ item.1.name }}"
-  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+    index_var: ridx
+  when: repo_git.results[ridx].stat.exists
   changed_when: >-
     (repo_mise.stdout | default('')) is search('install(ing|ed)')
     or (repo_mise.stderr | default('')) is search('install(ing|ed)')
@@ -63,13 +76,15 @@
   loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.user }}/{{ item.1.name }}"
+    index_var: ridx
   when:
     - item.1.install | default(true)
-    - "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+    - repo_git.results[ridx].stat.exists
   changed_when: false
 
 - name: Scaffold .env files from .env.example (never overwrites)
   ansible.builtin.shell:
+    executable: /bin/bash # need bash: `read -d ''` is unsupported by dash (/bin/sh on Debian/Ubuntu)
     cmd: >-
       find "/home/{{ item.0.user }}/projects/{{ item.1.name }}" -name '.env.example'
       -not -path '*/node_modules/*' -print0 |
@@ -78,5 +93,6 @@
   loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.user }}/{{ item.1.name }}"
-  when: "('/home/' + item.0.user + '/projects/' + item.1.name) is exists"
+    index_var: ridx
+  when: repo_git.results[ridx].stat.exists
   changed_when: false
