@@ -25,6 +25,14 @@
   ansible.builtin.command: mise --version
   changed_when: false
 
+- name: Ensure the system mise config directory exists
+  ansible.builtin.file:
+    path: /etc/mise
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Declare the shared toolchain versions (system mise config)
   ansible.builtin.template:
     src: mise-config.toml.j2
