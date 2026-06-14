@@ -55,6 +55,27 @@
     label: "{{ item.user }}"
   failed_when: false # offline provisioning shouldn't block; git clone will warn
 
+- name: Route GitHub SSH over port 443 for each profile
+  # Many cloud networks (e.g. Hetzner) block outbound TCP/22. ssh.github.com:443
+  # is GitHub's officially supported SSH endpoint and works everywhere, so we
+  # route github.com over it unconditionally — harmless where 22 is open too.
+  ansible.builtin.copy:
+    dest: "/home/{{ item.user }}/.ssh/config"
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0600"
+    content: |
+      # Managed by Ansible (claude-devbox).
+      Host github.com
+          HostName ssh.github.com
+          Port 443
+          User git
+          StrictHostKeyChecking accept-new
+  become_user: "{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
 - name: Write per-profile git identity
   ansible.builtin.copy:
     dest: "/home/{{ item.user }}/.gitconfig"
