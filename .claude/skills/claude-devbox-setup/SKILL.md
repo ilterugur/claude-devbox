@@ -61,7 +61,16 @@ over a long form. Gather:
 - **Profiles** — each is its own Linux user = one Claude account = one git identity.
   For each: `user`, `git_name`, `git_email`, `projects` (each `name` / `repo` /
   `branch` / optional `ports`), and `servers` (each `project` / `name` / `spawn` /
-  `capacity`).
+  `capacity`). For the profile `user`, don't default to a generic name like `work` —
+  **propose a username derived from the project's git identity** (e.g. the current
+  repo's `git config user.name`, lowercased/sanitized to `[a-z0-9-]`) so it's
+  meaningful; let the user confirm or override. Pull `git_name`/`git_email` and the
+  project's `repo` (convert an `https://github.com/...` remote to its `git@github.com:...`
+  SSH form for private clones) / `branch` straight from the target repo's `git config`
+  and `git remote` when it's available, rather than asking the user to type them.
+  Note the **operator** user is separate infrastructure (sudo/Ansible only, root SSH
+  is disabled after hardening so it can't be skipped) and **cannot** be the same Linux
+  user as a profile — if the user balks at "admin", explain that, don't merge them.
 
 If they want **more than one profile**, surface the multi-account rule up front:
 it's only for separately-owned, legitimately-paid subscriptions, never to dodge one
