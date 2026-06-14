@@ -35,6 +35,29 @@
     label: "{{ item.0.user }}/{{ item.1.name }}"
   register: repo_git
 
+- name: Pre-accept Claude's workspace-trust + Remote Control dialogs (the RC server runs claude headlessly)
+  # An untrusted workspace, or the first-run "Enable Remote Control?" prompt, makes
+  # `claude remote-control` block forever in the non-interactive service. Seed both
+  # flags in the profile's ~/.claude.json so the always-on server connects on its own.
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c 'import json,os,sys;
+      p=os.path.expanduser("~/.claude.json");
+      d=json.load(open(p)) if os.path.exists(p) else {};
+      d["remoteDialogSeen"]=True;
+      d.setdefault("projects",{}).setdefault(sys.argv[1],{})["hasTrustDialogAccepted"]=True;
+      json.dump(d,open(p,"w"),indent=2)'
+      "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
+  become_user: "{{ item.0.user }}"
+  environment:
+    HOME: "/home/{{ item.0.user }}"
+  loop: "{{ profiles | subelements('projects', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}/{{ item.1.name }}"
+    index_var: ridx
+  when: repo_git.results[ridx].stat.exists
+  changed_when: false
+
 - name: Trust each repo's own mise config (so its pinned versions are honored)
   ansible.builtin.command:
     cmd: "mise trust /home/{{ item.0.user }}/projects/{{ item.1.name }}"
