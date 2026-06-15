@@ -7,11 +7,21 @@
 # on disconnect with no resume (anthropics/claude-code#49790). tmux is already
 # installed (the Remote Control service uses it).
 
-- name: Install mosh
+- name: Install mosh + the locales package
+  # mosh-server adopts the locale the client forwards (e.g. macOS sends en_US.UTF-8);
+  # if that locale isn't generated on the box, mosh-server fails to start with
+  # "Did not find mosh server startup message". The `locales` package lets us generate it.
   ansible.builtin.apt:
-    name: mosh
+    name:
+      - mosh
+      - locales
     state: present
     update_cache: true
+
+- name: Generate the en_US.UTF-8 locale (clients commonly forward it to mosh-server)
+  community.general.locale_gen:
+    name: en_US.UTF-8
+    state: present
 
 - name: Allow mosh (UDP 60000-61000) over Tailscale
   # Scoped to the tailscale0 interface so the UDP range is reachable only from your
