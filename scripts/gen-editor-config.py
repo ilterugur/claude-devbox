@@ -19,7 +19,12 @@ Idempotent: rewrites only its own managed block / its own connection entries, an
 backs up each file first. Zed is skipped unless Zed is installed or --zed is given.
 
   python3 scripts/gen-editor-config.py [--repo PATH] [--prefix devbox] [--host H]
-                                       [--no-zed|--zed] [--no-shell|--shell-rc PATH]
+       [--default PROFILE] [--launch CMD] [--locale L] [--no-zed|--zed]
+       [--no-shell|--shell-rc PATH]
+
+The generated `<prefix>` command supports: `<prefix>` (default profile), `<prefix>
+<profile> [session]`, `<prefix> ls [profile]` (list open tmux sessions), and — when
+--launch is set — `<prefix> -s [profile]` (plain shell, skip the auto-launched command).
 """
 import argparse
 import json
@@ -140,33 +145,58 @@ def shell_block(profiles, prefix, default, locale, launch):
     # macOS region locale (e.g. en_TR.UTF-8, or a bare LC_CTYPE=UTF-8) that Linux can't
     # provide makes mosh-server fail to start or bash warn. LC_CTYPE must be pinned too.
     loc = f"LANG={locale} LC_ALL={locale} LC_CTYPE={locale}"
-    if launch:
-        # Run <launch> on session create; `exec $SHELL` keeps the session alive (and
-        # re-attachable) after it exits. On re-attach tmux ignores the command.
-        m_cmd = f"tmux new -A -s \"$sess\" '{launch}; exec $SHELL'"
-        s_cmd = f"tmux new -A -s $sess '{launch}; exec \\$SHELL'"
-        launchnote = f" Auto-runs `{launch}` on a fresh session (re-attach resumes it)."
-    else:
-        m_cmd = 'tmux new -A -s "$sess"'
-        s_cmd = "tmux new -A -s $sess"
-        launchnote = " Run `claude` yourself once attached."
+    bad = f'printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1'
+    chk = f'case " {users} " in *" $prof "*) ;; *) {bad} ;; esac'
     out = [
         BEGIN,
-        f"# `{prefix} [profile] [session]` — connect to a profile over mosh (falls back to",
-        "# ssh) into a persistent tmux session, so a dropped connection never loses work.",
-        f"# No profile => default '{default}'; no session => 'main'.{launchnote}",
-        "# mosh needs this client on the box's Tailscale net (mosh UDP is tailscale-only);",
-        "# `brew install mosh` / Blink / Termius provide the client.",
-        f"{prefix}() {{",
-        f'  local prof="${{1:-{default}}}" sess="${{2:-main}}" h',
-        f'  case " {users} " in *" $prof "*) ;; *)',
-        f'    printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1 ;; esac',
-        f'  h="{prefix}-$prof"',
-        f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- {m_cmd}',
-        f'  else {loc} ssh -t "$h" "{s_cmd}"; fi',
-        "}",
-        END,
+        f"# `{prefix} [profile] [session]` — connect to a profile over mosh (falls back to ssh)",
+        "# into a persistent tmux session, so a dropped connection never loses work.",
+        f"#   {prefix}                  default profile '{default}', session 'main'",
+        f"#   {prefix} <profile> [sess] a specific profile / named tmux session",
+        f"#   {prefix} ls [profile]     list that profile's open (attachable) tmux sessions",
     ]
+    if launch:
+        out += [
+            f"#   {prefix} -s [profile]    open a plain shell (skip the auto-`{launch}`)",
+            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); `exec $SHELL` keeps",
+            "# the session alive after it exits. mosh needs this client on the box's Tailscale",
+            "# net (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius provide it.",
+        ]
+    else:
+        out += [
+            "# mosh needs this client on the box's Tailscale net (mosh UDP is tailscale-only);",
+            "# `brew install mosh` / Blink / Termius provide the client. Run `claude` once attached.",
+        ]
+    out += [
+        f"{prefix}() {{",
+        f'  local prof sess h nolaunch=',
+        f'  if [ "$1" = ls ] || [ "$1" = -l ] || [ "$1" = --list ]; then',
+        f'    prof="${{2:-{default}}}"; {chk}',
+        f'''    {loc} ssh "{prefix}-$prof" "tmux ls 2>/dev/null || echo '(no open sessions)'"; return''',
+        f'  fi',
+    ]
+    if launch:
+        out += [f'  case "$1" in -s|--shell) nolaunch=1; shift ;; esac']
+    out += [
+        f'  prof="${{1:-{default}}}" sess="${{2:-main}}"; {chk}',
+        f'  h="{prefix}-$prof"',
+    ]
+    if launch:
+        out += [
+            f'  if command -v mosh >/dev/null 2>&1; then',
+            f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess"',
+            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" '{launch}; exec $SHELL'; fi''',
+            f'  else',
+            f'    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s $sess"',
+            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess '{launch}; exec \\$SHELL'"; fi''',
+            f'  fi',
+        ]
+    else:
+        out += [
+            f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- tmux new -A -s "$sess"',
+            f'  else {loc} ssh -t "$h" "tmux new -A -s $sess"; fi',
+        ]
+    out += ["}", END]
     return "\n".join(out) + "\n"
 
 
