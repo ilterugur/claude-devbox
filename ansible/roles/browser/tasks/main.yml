@@ -1,6 +1,7 @@
 ---
-# Opt-in (browser_automation: true). Server-side, headless browser use for the
-# agent: install Google Chrome and wire Playwright MCP into each profile. Playwright
+# On by default (browser_automation: true; set false to skip). Server-side, headless
+# browser use for the agent: install Google Chrome and wire Playwright MCP into each
+# profile. Playwright
 # drives the system Chrome headless — the 2026 standard for agent browser automation
 # (accessibility-tree, token-cheap). This is NOT "Claude in Chrome" (that extension
 # is client-side, on your laptop).

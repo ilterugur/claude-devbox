@@ -59,8 +59,9 @@
     - { role: projects, tags: [projects] }
     - { role: claude_remote, tags: [remote, services] }
     - { role: claude_config, tags: [config, sync] }
-    # OPT-IN (browser_automation: true): headless Chrome + Playwright MCP per profile.
-    - { role: browser, tags: [browser], when: "browser_automation | default(false)" }
+    # ON BY DEFAULT (set browser_automation: false to skip): headless Chrome +
+    # Playwright MCP per profile.
+    - { role: browser, tags: [browser], when: "browser_automation | default(true)" }
     # OPT-IN cleanup. `never` keeps it OUT of normal runs entirely — it only runs
     # when you explicitly ask: `ansible-playbook playbook.yml --tags prune`.
     - { role: prune, tags: [prune, never] }
