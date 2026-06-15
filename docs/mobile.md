@@ -75,8 +75,9 @@ claude            # drop signal / close the lid → reconnect resumes the same s
 ```
 
 `devbox` is just `mosh <prefix>-<profile> -- tmux new -A -s <session>`; run
-`gen-editor-config.py --host <tailscale-name-or-100.x>` so the alias resolves over
-Tailscale (mosh UDP is tailscale-only). From the laptop you can also run
+`gen-editor-config.py --host <tailscale-100.x-IP>` (the **100.x IP**, not the MagicDNS
+name — mosh often can't resolve MagicDNS) so the alias resolves over Tailscale (mosh
+UDP is tailscale-only). From the laptop you can also run
 `scripts/connect.sh mosh <user>` (needs `brew install mosh` locally).
 
 > **Why not Claude Desktop's integrated SSH for this?** Its remote‑project SSH mode

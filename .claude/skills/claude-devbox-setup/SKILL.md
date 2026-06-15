@@ -158,7 +158,8 @@ These can't be fully automated; walk the user through them:
   comments it prints the snippet to paste instead — paste it yourself). It also writes
   a one-word **`devbox`** shell command (`devbox` = default profile, `devbox <profile>
   [session]` otherwise) that connects over mosh+tmux for a drop-proof terminal — pass
-  `--host <tailscale-name>` so mosh resolves over Tailscale (its UDP is tailscale-only),
+  `--host <tailscale-100.x-IP>` so mosh resolves over Tailscale (its UDP is tailscale-only;
+  use the **100.x IP, not the MagicDNS name** — mosh often can't resolve MagicDNS),
   `--default <profile>` to set the bare-`devbox` target, and `--launch claude` to auto-start
   Claude on a fresh session (the command pins LANG/LC_ALL/LC_CTYPE so a macOS region locale
   like en_TR.UTF-8 doesn't break mosh-server). Re-running is safe:

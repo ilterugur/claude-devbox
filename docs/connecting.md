@@ -47,7 +47,8 @@ falls back to `ssh` if mosh isn't available. Under the hood it's
 
 - Installed by default (`mosh_enabled`); the box's mosh UDP range is open **only on
   tailscale0**, so the `devbox` alias must point at the box's **Tailscale** address —
-  run `gen-editor-config.py --host <tailscale-name-or-100.x>`. Clients: this machine on
+  run `gen-editor-config.py --host <tailscale-100.x-IP>` — use the **100.x IP**, not the
+  MagicDNS name (mosh often can't resolve MagicDNS). Clients: this machine on
   Tailscale + `brew install mosh` (laptop) or Blink / Termius (phone).
 - Best for: mobile, switching cells/Wi‑Fi, a real terminal.
 
