@@ -1,0 +1,152 @@
+/**
+ * mount.ts — `devbox mount`: expose configured laptop paths to the box as ephemeral,
+ * read-only, full-depth mounts. A laptop-side `rclone serve sftp` (jailed to the path,
+ * --read-only, key-auth) is reached by the box over an `ssh -R` reverse tunnel and
+ * mounted with `sshfs -f`. Pure builders are exported for unit tests; runMountUp/Down
+ * orchestrate. Honors DEVBOX_DRYRUN=1 (print, don't execute).
+ */
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { die, hostFor, lazyMountsFor, shQuote, type Config } from "./config";
+import { freePort, normalizePath, pathsOverlap, reconcileBridges, syncDiskRoot, writeBridges, type LiveMount } from "./bridge";
+
+const SSHFS_OPTS = [
+  "ro",
+  "reconnect",
+  "ServerAliveInterval=15",
+  "ServerAliveCountMax=3",
+  "StrictHostKeyChecking=no",
+  "UserKnownHostsFile=/dev/null",
+  "follow_symlinks",
+];
+
+export function buildRcloneServeArgs(servePath: string, port: number, authKeysFile: string): string[] {
+  return [
+    "serve", "sftp", servePath,
+    "--addr", `127.0.0.1:${port}`,
+    "--read-only",
+    "--user", "mount",
+    "--authorized-keys", authKeysFile,
+    "--vfs-cache-mode", "off",
+  ];
+}
+
+export function buildSshfsRemoteCmd(boxPort: number, mountpoint: string, keyFile: string): string {
+  const mp = shQuote(mountpoint);
+  const opts = [...SSHFS_OPTS, `IdentityFile=${shQuote(keyFile)}`].join(",");
+  return [
+    `mkdir -p ${mp}`,
+    `fusermount -uz ${mp} 2>/dev/null || true`,
+    `exec sshfs -p ${boxPort} mount@127.0.0.1:/ ${mp} -o ${opts}`,
+  ].join("; ");
+}
+
+export function buildSshRArgs(host: string, boxPort: number, localPort: number, remoteCmd: string): string[] {
+  return ["-T", "-R", `127.0.0.1:${boxPort}:127.0.0.1:${localPort}`, host, remoteCmd];
+}
+
+export type MountPlan = { label: string; localPath: string; remotePath: string; host: string };
+
+/** Pure: turn a profile's configured lazy mounts into per-label plan entries, enforcing
+ *  the overlap rule against the sync disk. Throws (via die) on a bad config. */
+export function planMounts(cfg: Config, profile: string): MountPlan[] {
+  const host = hostFor(cfg, profile);
+  const disk = syncDiskRoot(profile);
+  return lazyMountsFor(cfg, profile).map((m) => {
+    const localPath = normalizePath(m.path);
+    if (pathsOverlap(localPath, disk)) die(`lazy mount "${m.label}" (${localPath}) overlaps the sync disk ${disk}`);
+    return { label: m.label, localPath, remotePath: `/home/${profile}/mnt/${m.label}`, host };
+  });
+}
+
+const isDry = () => !!process.env.DEVBOX_DRYRUN;
+const out = (s: string) => process.stdout.write(s + "\n");
+
+/** Establish all configured lazy mounts for a profile. Idempotent: reconciles + skips
+ *  labels already live. Each mount = one detached rclone serve + one detached `ssh -R`
+ *  running `sshfs -f` (foreground, so the ssh process is the mount's lifecycle). */
+export function runMountUp(cfg: Config, profile: string): void {
+  const plans = planMounts(cfg, profile);
+  if (!plans.length) return void out(`devbox: no lazy_mounts configured for profile "${profile}"`);
+  const live = reconcileBridges();
+  const host = hostFor(cfg, profile);
+
+  for (const p of plans) {
+    if (live.some((m) => m.profile === profile && m.label === p.label)) {
+      out(`  ✓ ${p.label} already mounted`);
+      continue;
+    }
+    const rp = freePort();
+    const bp = rp; // reuse the same number for the box-side forward
+    const keydir = mkdtempSync(join(tmpdir(), "devbox-mnt-"));
+    const keyFile = join(keydir, "id");
+    const remoteKey = `/home/${profile}/.cache/devbox-bridge/${p.label}.key`;
+
+    if (isDry()) {
+      out(`  ── would mount ${p.localPath} -> ${host}:${p.remotePath} (rclone :${rp}, ssh -R ${bp})`);
+      out(`     rclone ${buildRcloneServeArgs(p.localPath, rp, `${keyFile}.pub`).join(" ")}`);
+      out(`     ssh ${buildSshRArgs(host, bp, rp, buildSshfsRemoteCmd(bp, p.remotePath, remoteKey)).join(" ")}`);
+      rmSync(keydir, { recursive: true, force: true });
+      continue;
+    }
+
+    // 1) ephemeral keypair (box-user isolation: the -R port is localhost-reachable by any box user)
+    const kg = spawnSync("ssh-keygen", ["-t", "ed25519", "-N", "", "-q", "-f", keyFile]);
+    if (kg.status !== 0) die(`ssh-keygen failed for ${p.label}`);
+
+    // 2) ship the PRIVATE key to the box (0600) so sshfs can auth to rclone
+    const ship = `umask 077; mkdir -p /home/${profile}/.cache/devbox-bridge; cat > ${shQuote(remoteKey)}`;
+    const sk = spawnSync("ssh", ["-o", "BatchMode=yes", host, ship], { input: readFileSync(keyFile) });
+    if (sk.status !== 0) die(`could not place mount key on ${host}: ${(sk.stderr || "").toString().trim()}`);
+
+    // 3) start rclone serve (detached, survives this CLI invocation)
+    const rclone = spawn("rclone", buildRcloneServeArgs(p.localPath, rp, `${keyFile}.pub`), {
+      detached: true, stdio: "ignore",
+    });
+    rclone.unref();
+
+    // 4) open the reverse tunnel + foreground sshfs (detached; this ssh IS the mount)
+    const remoteCmd = buildSshfsRemoteCmd(bp, p.remotePath, remoteKey);
+    const ssh = spawn("ssh", buildSshRArgs(host, bp, rp, remoteCmd), { detached: true, stdio: "ignore" });
+    ssh.unref();
+
+    const entry: LiveMount = {
+      profile, label: p.label, tunnelPort: bp,
+      rclonePid: rclone.pid ?? -1, sshPid: ssh.pid ?? -1,
+      remotePath: p.remotePath, localPath: p.localPath,
+      createdAt: new Date().toISOString(),
+    };
+    writeBridges([...reconcileBridges(), entry]);
+    out(`  ✓ ${p.label}: ${p.localPath} -> ${host}:${p.remotePath} (read-only)`);
+  }
+}
+
+function killPid(pid: number): void {
+  try { process.kill(pid); } catch { /* already gone */ }
+}
+
+/** Tear down lazy mounts. `label` undefined => all of the profile's mounts. */
+export function runMountDown(cfg: Config, profile: string, label?: string): void {
+  const host = hostFor(cfg, profile);
+  const all = reconcileBridges();
+  const victims = all.filter((m) => m.profile === profile && (!label || m.label === label));
+  if (!victims.length) return void out(`devbox: no live mounts to remove for "${profile}"${label ? ` (${label})` : ""}`);
+  for (const m of victims) {
+    if (isDry()) { out(`  ── would unmount ${host}:${m.remotePath} (kill ${m.sshPid}, ${m.rclonePid})`); continue; }
+    killPid(m.sshPid);
+    killPid(m.rclonePid);
+    spawnSync("ssh", ["-o", "BatchMode=yes", host,
+      `fusermount -uz ${shQuote(m.remotePath)} 2>/dev/null; rm -f /home/${profile}/.cache/devbox-bridge/${m.label}.key`]);
+    out(`  ✓ unmounted ${m.label}`);
+  }
+  writeBridges(all.filter((m) => !victims.includes(m)));
+}
+
+/** Print the live lazy mounts (after reconcile). */
+export function runMountStatus(): void {
+  const live = reconcileBridges();
+  if (!live.length) return void out("devbox: no live lazy mounts");
+  for (const m of live) out(`  ${m.profile}/${m.label}  ${m.localPath} -> ${m.remotePath}  (pid ssh ${m.sshPid})`);
+}

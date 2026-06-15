@@ -16,6 +16,8 @@ import {
   die,
   gitMatch,
   hostFor,
+  lazyMountOnConnect,
+  lazyMountsFor,
   loadConfig,
   projectsOf,
   readState,
@@ -25,6 +27,7 @@ import {
 } from "./config";
 import { pickUI } from "./picker";
 import { runPush } from "./push";
+import { runMountUp, runMountDown, runMountStatus } from "./mount";
 
 function newHelp(prof: string) {
   const lines = [
@@ -106,12 +109,29 @@ cli
   });
 
 cli
+  .command("mount [action]", "lazy-mount configured laptop paths on the box (action: up|down|status)")
+  .option("-p, --profile <profile>", "target profile")
+  .option("--label <label>", "only this mount (for down)")
+  .action((action: string | undefined, opts: { profile?: string; label?: string }) => {
+    const prof = resolveProfile(cfg, opts.profile);
+    switch (action ?? "up") {
+      case "up": return runMountUp(cfg, prof);
+      case "down": return runMountDown(cfg, prof, opts.label);
+      case "status": return runMountStatus();
+      default: return die(`unknown mount action "${action}" (up|down|status)`);
+    }
+  });
+
+cli
   .command("[project]", "connect — picker, or git-auto-open, when no project is given")
   .option("-p, --profile <profile>", "use this profile for this call only")
   .option("-m, --menu", "force the picker (skip git auto-open)")
   .option("-s, --shell", "open a plain shell (skip the auto-launch)")
   .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean }) => {
     const prof = resolveProfile(cfg, opts.profile);
+    if (lazyMountOnConnect(cfg, prof) && lazyMountsFor(cfg, prof).length) {
+      try { runMountUp(cfg, prof); } catch (e) { process.stderr.write(`devbox: lazy mount skipped: ${(e as Error).message}\n`); }
+    }
     if (project) return connect(cfg, prof, project, { shellOnly: !!opts.shell });
     if (!opts.menu) {
       const m = gitMatch(cfg);

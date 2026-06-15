@@ -16,12 +16,22 @@ export const CONFIG_PATH = join(CFG_DIR, "config.json");
 export const STATE_PATH = join(CFG_DIR, "active-profile");
 
 export type Project = { name: string; repo?: string };
-export type Profile = { user: string; projects: Project[] };
+export type LazyMount = { label: string; path: string };
+export type EngineId = "mutagen" | "syncthing";
+export type Profile = {
+  user: string;
+  projects: Project[];
+  lazyMounts?: LazyMount[];
+  syncEngine?: EngineId;
+  syncDisk?: boolean;
+  lazyMountOnConnect?: boolean;
+};
 // `host` is written by gen-editor-config.py for reference only — the CLI resolves
 // the box via the ssh alias `${prefix}-${profile}` (HostName lives in ~/.ssh/config).
 export type Config = { prefix: string; default: string; locale: string; launch: string; host?: string; profiles: Profile[] };
 
 export function die(msg: string): never {
+  if (process.env.NODE_ENV === "test") throw new Error(msg); // testable: don't kill the runner
   process.stderr.write(`devbox: ${msg}\n`);
   process.exit(1);
 }
@@ -141,6 +151,14 @@ export function connect(
 export function projectsOf(cfg: Config, prof: string): string[] {
   return (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
 }
+
+// ── file-bridge accessors (lazy mounts + sync disk) ──────────────────────────
+const profileOf = (cfg: Config, prof: string): Profile | undefined => cfg.profiles.find((p) => p.user === prof);
+
+export const lazyMountsFor = (cfg: Config, prof: string): LazyMount[] => profileOf(cfg, prof)?.lazyMounts ?? [];
+export const syncEngineFor = (cfg: Config, prof: string): EngineId => profileOf(cfg, prof)?.syncEngine ?? "mutagen";
+export const syncDiskEnabled = (cfg: Config, prof: string): boolean => profileOf(cfg, prof)?.syncDisk ?? false;
+export const lazyMountOnConnect = (cfg: Config, prof: string): boolean => profileOf(cfg, prof)?.lazyMountOnConnect ?? false;
 
 // ── session / transcript helpers ─────────────────────────────────────────────
 
