@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "devbox": "./src/devbox.ts" },
+  "bin": {
+    "devbox": "./src/devbox.ts"
+  },
   "scripts": {
     "build": "bun build --compile --minify src/devbox.ts --outfile dist/devbox",
     "dev": "bun run src/devbox.ts"
@@ -11,5 +13,8 @@
   "dependencies": {
     "@clack/prompts": "latest",
     "cac": "latest"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
   }
 }

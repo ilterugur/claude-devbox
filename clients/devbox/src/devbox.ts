@@ -108,16 +108,32 @@ function connect(cfg: Config, prof: string, project: string | null, shellOnly: b
   child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));
 }
 
+/** Subsequence fuzzy match (e.g. "isc" matches "insurchat"). */
+function fuzzy(label: string, search: string): boolean {
+  const s = label.toLowerCase();
+  const q = search.toLowerCase();
+  let i = 0;
+  for (const c of s) if (c === q[i]) i++;
+  return i === q.length;
+}
+
 async function pick(cfg: Config, prof: string): Promise<string | null> {
   const projects = (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
   const sel = await autocomplete({
     message: `devbox · ${prof}`,
-    placeholder: "type to filter…",
+    placeholder: projects.length ? "type to filter projects…" : "no projects yet — pick an action",
+    // Projects up top (the fuzzy list); the two actions pinned at the bottom, set apart
+    // by a dimmed hint on the right. The custom filter keeps the actions always visible.
     options: [
-      { value: "__home__", label: "○ open in HOME (no project)" },
-      { value: "__new__", label: "✚ create a new project" },
       ...projects.map((p) => ({ value: p, label: p })),
+      { value: "__home__", label: "⌂  home", hint: "no project · open in ~" },
+      { value: "__new__", label: "＋  new project", hint: "show how to add one" },
     ],
+    filter: (search, option) =>
+      option.value === "__home__" ||
+      option.value === "__new__" ||
+      !search ||
+      fuzzy(String(option.label ?? option.value), search),
   });
   return isCancel(sel) ? null : (sel as string);
 }
