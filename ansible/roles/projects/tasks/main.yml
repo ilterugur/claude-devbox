@@ -37,15 +37,19 @@
 
 - name: Pre-accept Claude's workspace-trust + Remote Control dialogs (the RC server runs claude headlessly)
   # An untrusted workspace, or the first-run "Enable Remote Control?" prompt, makes
-  # `claude remote-control` block forever in the non-interactive service. Seed both
+  # `claude remote-control` block forever in the non-interactive service. Seed the
   # flags in the profile's ~/.claude.json so the always-on server connects on its own.
+  # Trust the project dir AND the profile's HOME — the `devbox` command launches claude
+  # from a login shell (cwd = HOME), which would otherwise prompt to trust the folder.
   ansible.builtin.command:
     cmd: >-
       python3 -c 'import json,os,sys;
       p=os.path.expanduser("~/.claude.json");
       d=json.load(open(p)) if os.path.exists(p) else {};
       d["remoteDialogSeen"]=True;
-      d.setdefault("projects",{}).setdefault(sys.argv[1],{})["hasTrustDialogAccepted"]=True;
+      pr=d.setdefault("projects",{});
+      pr.setdefault(sys.argv[1],{})["hasTrustDialogAccepted"]=True;
+      pr.setdefault(os.path.expanduser("~"),{})["hasTrustDialogAccepted"]=True;
       json.dump(d,open(p,"w"),indent=2)'
       "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
   become_user: "{{ item.0.user }}"
