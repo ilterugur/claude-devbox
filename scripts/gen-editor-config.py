@@ -362,7 +362,11 @@ def write_cli_config(profiles, prefix, host, default, locale, launch):
         "launch": launch,
         "profiles": [
             {"user": p["user"],
-             "projects": [{"name": pr["name"], "repo": pr.get("repo", "")} for pr in (p.get("projects") or [])]}
+             "projects": [{"name": pr["name"], "repo": pr.get("repo", "")} for pr in (p.get("projects") or [])],
+             **({"lazyMounts": [{"label": m["label"], "path": m["path"]} for m in p["lazy_mounts"]]} if p.get("lazy_mounts") else {}),
+             **({"syncEngine": p["sync_engine"]} if p.get("sync_engine") else {}),
+             **({"syncDisk": True} if p.get("sync_disk") else {}),
+             **({"lazyMountOnConnect": True} if p.get("lazy_mount_on_connect") else {})}
             for p in profiles
         ],
     }

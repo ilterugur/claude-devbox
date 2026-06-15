@@ -70,3 +70,16 @@
     name: fail2ban
     enabled: true
     state: started
+
+# ── File bridge: the lazy-mount reverse tunnel (ssh -R) needs TCP forwarding ───
+- name: Read effective sshd config
+  ansible.builtin.command: sshd -T
+  changed_when: false
+  register: _sshd_eff
+
+- name: Assert sshd permits TCP forwarding (devbox lazy-mount reverse tunnel needs it)
+  ansible.builtin.assert:
+    that: "'allowtcpforwarding no' not in (_sshd_eff.stdout | lower)"
+    fail_msg: >-
+      sshd has AllowTcpForwarding disabled; devbox lazy mounts (ssh -R) will not work.
+      Remove that directive from the hardening config.

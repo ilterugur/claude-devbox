@@ -55,6 +55,20 @@ profiles:
         spawn: worktree # worktree | same-dir | session
         capacity: 4 # Claude's flag default is 32; 4 is gentler on RAM
 
+    # ── File bridge (optional) — see docs/file-bridge.md ──────────────────────
+    # Lazy, read-only, full-depth windows onto laptop paths. The box mounts these
+    # at /home/<user>/mnt/<label> while your laptop is online (gone when it sleeps).
+    # Declared here; gen-editor-config.py propagates them to the laptop CLI config.
+    # lazy_mounts:
+    #   - { label: desktop,   path: "~/Desktop" }
+    #   - { label: documents, path: "~/Documents" }
+    # lazy_mount_on_connect: true   # auto `devbox mount up` when you connect
+    #
+    # Two-way sync "disk" (~/devbox/<user> <-> /home/<user>/sync). Drop folders in;
+    # they stay on the box when the laptop is closed.
+    # sync_disk: true
+    # sync_engine: mutagen          # mutagen (default) | syncthing (provision: --tags syncthing)
+
   # - user: personal
   #   git_name: "Your Name"
   #   git_email: "you@personal.example"

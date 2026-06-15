@@ -18,6 +18,8 @@
       - rsync
       - build-essential
       - pkg-config
+      - sshfs
+      - fuse3
     state: present
 
 - name: Create non-root sudo user

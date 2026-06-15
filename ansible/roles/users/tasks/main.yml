@@ -92,14 +92,18 @@
   loop_control:
     label: "{{ item.user }}"
 
-- name: Create per-profile ~/.claude and ~/projects
+- name: Create per-profile ~/.claude, ~/projects, and file-bridge dirs (~/mnt, ~/sync)
   ansible.builtin.file:
     path: "/home/{{ item.0.user }}/{{ item.1.path }}"
     state: directory
     owner: "{{ item.0.user }}"
     group: "{{ item.0.user }}"
     mode: "{{ item.1.mode }}"
-  loop: "{{ profiles | product([{'path': '.claude', 'mode': '0700'}, {'path': 'projects', 'mode': '0755'}]) | list }}"
+  loop: "{{ profiles | product([
+            {'path': '.claude', 'mode': '0700'},
+            {'path': 'projects', 'mode': '0755'},
+            {'path': 'mnt', 'mode': '0700'},
+            {'path': 'sync', 'mode': '0700'}]) | list }}"
   loop_control:
     label: "{{ item.0.user }} {{ item.1.path }}"
 
