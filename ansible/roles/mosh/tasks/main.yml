@@ -18,10 +18,17 @@
     state: present
     update_cache: true
 
-- name: Generate the en_US.UTF-8 locale (clients commonly forward it to mosh-server)
+- name: Generate the configured UTF-8 locale(s)
+  # mosh-server adopts the locale forwarded by the client (via mosh-server -l ...), so
+  # that locale must exist here. The `devbox` connect command pins LC_ALL to the first
+  # of these client-side, which is the real fix for clients (e.g. macOS) that forward a
+  # region locale like en_TR.UTF-8 that Linux can't provide. Add more here if you want a
+  # different working locale available (note: a Turkish locale's dotless-i case-folding
+  # can break build tools — keep en_US.UTF-8 as the default).
   community.general.locale_gen:
-    name: en_US.UTF-8
+    name: "{{ item }}"
     state: present
+  loop: "{{ locales | default(['en_US.UTF-8']) }}"
 
 - name: Allow mosh (UDP 60000-61000) over Tailscale
   # Scoped to the tailscale0 interface so the UDP range is reachable only from your

@@ -89,6 +89,13 @@ browser_automation: true
 #  with: mosh <user>@<tailscale-name> -- tmux new -A -s main  (then run `claude`).
 mosh_enabled: true
 
+#  UTF-8 locale(s) to generate on the box (mosh-server adopts the client's locale).
+#  The `devbox` connect command pins LC_ALL to the FIRST entry client-side, so a
+#  client forwarding a locale Linux can't make (e.g. macOS en_TR.UTF-8) still works.
+#  Keep en_US.UTF-8 first (a Turkish working locale's dotless-i breaks build tools).
+locales:
+  - en_US.UTF-8
+
 # ── Optional cleanup (all OFF by default) ─────────────────────────────────────
 # Remove superseded mise tool versions after a runtime bump (frees disk):
 mise_prune: false

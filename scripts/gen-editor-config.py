@@ -134,7 +134,7 @@ def write_zed(entries, prefix, forced):
     print(f"  ✓ ~/.config/zed/settings.json updated (backup alongside if it existed)")
 
 
-def shell_block(profiles, prefix, default):
+def shell_block(profiles, prefix, default, locale):
     users = " ".join(p["user"] for p in profiles)
     out = [
         BEGIN,
@@ -143,13 +143,15 @@ def shell_block(profiles, prefix, default):
         f"# No profile => default '{default}'; no session => 'main'. mosh needs this client",
         "# on the box's Tailscale net (mosh UDP is tailscale-only); `brew install mosh` /",
         "# Blink / Termius provide the client. Run `claude` yourself once attached.",
+        f"# LC_ALL is pinned to {locale}: mosh hands the client's locale to mosh-server, and",
+        "# a region locale like en_TR.UTF-8 (macOS) that Linux can't provide makes it fail.",
         f"{prefix}() {{",
         f'  local prof="${{1:-{default}}}" sess="${{2:-main}}" h',
         f'  case " {users} " in *" $prof "*) ;; *)',
         f'    printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1 ;; esac',
         f'  h="{prefix}-$prof"',
-        '  if command -v mosh >/dev/null 2>&1; then mosh "$h" -- tmux new -A -s "$sess"',
-        '  else ssh -t "$h" "tmux new -A -s $sess"; fi',
+        f'  if command -v mosh >/dev/null 2>&1; then LC_ALL={locale} mosh "$h" -- tmux new -A -s "$sess"',
+        f'  else LC_ALL={locale} ssh -t "$h" "tmux new -A -s $sess"; fi',
         "}",
         END,
     ]
@@ -194,6 +196,7 @@ def main():
     ap.add_argument("--default", help="default profile for the bare `<prefix>` command (else the first)")
     ap.add_argument("--shell-rc", help="shell rc file to write the connect function into (else autodetect)")
     ap.add_argument("--no-shell", action="store_true", help="don't add the shell connect function")
+    ap.add_argument("--locale", default="en_US.UTF-8", help="locale the connect command pins (LC_ALL) so mosh-server starts (default en_US.UTF-8)")
     args = ap.parse_args()
 
     repo = find_repo(args.repo)
@@ -213,7 +216,7 @@ def main():
     if not args.no_zed:
         write_zed(zed_entries(profiles, args.prefix), args.prefix, args.zed)
     if not args.no_shell:
-        write_shell_rc(shell_block(profiles, args.prefix, default), shell_rc_path(args.shell_rc))
+        write_shell_rc(shell_block(profiles, args.prefix, default, args.locale), shell_rc_path(args.shell_rc))
 
     aliases = ", ".join(f"{args.prefix}-{p['user']}" for p in profiles)
     print(f"\nDone.")
