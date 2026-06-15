@@ -9,11 +9,17 @@ ansible/group_vars/all.yml and writes:
                                Zed (Zed shells out to ssh, inheriting the alias).
   * ~/.config/zed/settings.json — `ssh_connections` referencing those aliases,
                                pre-listing each profile's ~/projects/<name>.
+  * your shell rc (~/.zshrc / ~/.bashrc) — a `devbox-<user>` function per profile
+                               that connects over mosh (falls back to ssh) into a
+                               persistent tmux session, so a dropped connection
+                               never loses work. mosh needs this client on the
+                               box's Tailscale net (mosh UDP is tailscale-only).
 
 Idempotent: rewrites only its own managed block / its own connection entries, and
 backs up each file first. Zed is skipped unless Zed is installed or --zed is given.
 
-  python3 scripts/gen-editor-config.py [--repo PATH] [--prefix devbox] [--host H] [--no-zed|--zed]
+  python3 scripts/gen-editor-config.py [--repo PATH] [--prefix devbox] [--host H]
+                                       [--no-zed|--zed] [--no-shell|--shell-rc PATH]
 """
 import argparse
 import json
@@ -128,6 +134,55 @@ def write_zed(entries, prefix, forced):
     print(f"  ✓ ~/.config/zed/settings.json updated (backup alongside if it existed)")
 
 
+def shell_block(profiles, prefix, default):
+    users = " ".join(p["user"] for p in profiles)
+    out = [
+        BEGIN,
+        f"# `{prefix} [profile] [session]` — connect to a profile over mosh (falls back to",
+        "# ssh) into a persistent tmux session, so a dropped connection never loses work.",
+        f"# No profile => default '{default}'; no session => 'main'. mosh needs this client",
+        "# on the box's Tailscale net (mosh UDP is tailscale-only); `brew install mosh` /",
+        "# Blink / Termius provide the client. Run `claude` yourself once attached.",
+        f"{prefix}() {{",
+        f'  local prof="${{1:-{default}}}" sess="${{2:-main}}" h',
+        f'  case " {users} " in *" $prof "*) ;; *)',
+        f'    printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1 ;; esac',
+        f'  h="{prefix}-$prof"',
+        '  if command -v mosh >/dev/null 2>&1; then mosh "$h" -- tmux new -A -s "$sess"',
+        '  else ssh -t "$h" "tmux new -A -s $sess"; fi',
+        "}",
+        END,
+    ]
+    return "\n".join(out) + "\n"
+
+
+def shell_rc_path(override):
+    if override:
+        return os.path.expanduser(override)
+    home = os.path.expanduser("~")
+    sh = os.environ.get("SHELL", "")
+    if "zsh" in sh:
+        return os.path.join(home, ".zshrc")
+    if "bash" in sh:
+        return os.path.join(home, ".bashrc")
+    for cand in (".zshrc", ".bashrc"):
+        if os.path.exists(os.path.join(home, cand)):
+            return os.path.join(home, cand)
+    return os.path.join(home, ".zshrc")
+
+
+def write_shell_rc(block, path):
+    existing = open(path).read() if os.path.exists(path) else ""
+    if existing:
+        shutil.copy2(path, path + ".bak")
+    stripped = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", "", existing, flags=re.S)
+    new = (stripped.rstrip() + "\n\n" if stripped.strip() else "") + block
+    with open(path, "w") as f:
+        f.write(new)
+    short = path.replace(os.path.expanduser("~"), "~")
+    print(f"  ✓ {short} updated (backup: {short}.bak) — open a new terminal or `source {short}`")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo")
@@ -136,6 +191,9 @@ def main():
     ap.add_argument("--key", help="override IdentityFile (else operator_private_key_path)")
     ap.add_argument("--zed", action="store_true", help="write Zed config even if Zed isn't detected")
     ap.add_argument("--no-zed", action="store_true")
+    ap.add_argument("--default", help="default profile for the bare `<prefix>` command (else the first)")
+    ap.add_argument("--shell-rc", help="shell rc file to write the connect function into (else autodetect)")
+    ap.add_argument("--no-shell", action="store_true", help="don't add the shell connect function")
     args = ap.parse_args()
 
     repo = find_repo(args.repo)
@@ -145,15 +203,24 @@ def main():
         die("no profiles in group_vars/all.yml")
     host = box_host(repo, args.host)
     key = args.key or v.get("operator_private_key_path") or "~/.ssh/id_ed25519"
+    users = [p["user"] for p in profiles]
+    default = args.default or users[0]
+    if default not in users:
+        die(f"--default '{default}' is not a profile (have: {', '.join(users)})")
 
     print(f"Box {host} · {len(profiles)} profile(s) · alias prefix '{args.prefix}-'")
     write_ssh_config(ssh_block(profiles, host, key, args.prefix))
     if not args.no_zed:
         write_zed(zed_entries(profiles, args.prefix), args.prefix, args.zed)
+    if not args.no_shell:
+        write_shell_rc(shell_block(profiles, args.prefix, default), shell_rc_path(args.shell_rc))
 
     aliases = ", ".join(f"{args.prefix}-{p['user']}" for p in profiles)
-    print(f"\nDone. In VS Code/Cursor: Remote-SSH → Connect to Host → {aliases}")
-    print(f"In Zed: command palette → 'projects: open remote'.")
+    print(f"\nDone.")
+    print(f"  • Terminal (mosh+tmux, drop-proof):  {args.prefix} [profile] [session]")
+    print(f"      e.g. `{args.prefix}` → {default} · `{args.prefix} {users[-1]}` → {users[-1]} · 2nd arg = tmux session")
+    print(f"  • VS Code / Cursor: Remote-SSH → Connect to Host → {aliases}")
+    print(f"  • Zed: command palette → 'projects: open remote'")
 
 
 if __name__ == "__main__":

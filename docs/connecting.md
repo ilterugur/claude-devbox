@@ -30,18 +30,25 @@ An always-on `claude remote-control` server runs on the box per `(profile, proje
 ### 2. mosh + tmux — terminal, roaming-resilient (best for flaky connections)
 
 Drive the real `claude` TUI from a terminal that survives network drops.
+`gen-editor-config.py` writes a one-word `devbox` command for this (per profile):
 
 ```bash
-mosh <user>@<box> -- tmux new -A -s main     # over Tailscale
-#   inside:
+devbox                      # connect to the default profile, tmux session "main"
+devbox <profile>            # a specific profile; add a 2nd arg for a named session
+devbox <profile> <session>  # e.g. devbox work scratch
+#   then, once attached:
 claude
 ```
 
-- **mosh** auto-reconnects across network/IP changes; **tmux** keeps the session (and
-  `claude`) alive on the box, so a reconnect lands exactly where you left off.
-- Installed by default (`mosh_enabled`); its UDP range is open **only on tailscale0**,
-  so connect over Tailscale. Clients: Blink / Termius on the phone, `brew install mosh`
-  on the laptop (or `scripts/connect.sh mosh <user>`).
+It connects over **mosh** (auto-reconnects across network/IP changes) into a
+persistent **tmux** session — so a reconnect lands exactly where you left off — and
+falls back to `ssh` if mosh isn't available. Under the hood it's
+`mosh <prefix>-<profile> -- tmux new -A -s <session>`.
+
+- Installed by default (`mosh_enabled`); the box's mosh UDP range is open **only on
+  tailscale0**, so the `devbox` alias must point at the box's **Tailscale** address —
+  run `gen-editor-config.py --host <tailscale-name-or-100.x>`. Clients: this machine on
+  Tailscale + `brew install mosh` (laptop) or Blink / Termius (phone).
 - Best for: mobile, switching cells/Wi‑Fi, a real terminal.
 
 ### 3. Claude Desktop — integrated SSH remote project (desk only)

@@ -155,8 +155,12 @@ These can't be fully automated; walk the user through them:
   managed block, backed up first) — that's the SSH-host entry the **Claude desktop app**,
   VS Code / Cursor Remote-SSH, plain `ssh`, and Zed all read. For Zed it also merges an
   `ssh_connections` entry pre-listing each profile's projects (if Zed's settings has
-  comments it prints the snippet to paste instead — paste it yourself). Re-running is
-  safe: existing blocks are updated in place, not duplicated.
+  comments it prints the snippet to paste instead — paste it yourself). It also writes
+  a one-word **`devbox`** shell command (`devbox` = default profile, `devbox <profile>
+  [session]` otherwise) that connects over mosh+tmux for a drop-proof terminal — pass
+  `--host <tailscale-name>` so mosh resolves over Tailscale (its UDP is tailscale-only),
+  and `--default <profile>` to set the bare-`devbox` target. Re-running is safe:
+  existing blocks are updated in place, not duplicated.
 - Point the user to daily use: connect the **desktop app / VS Code Remote-SSH /
   Zed as a profile** (e.g. `devbox-work`), drive from the **mobile app** per
   profile, and preview dev servers (`docs/realtime-sync.md`, `docs/mobile.md`).

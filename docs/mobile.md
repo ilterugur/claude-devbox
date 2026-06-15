@@ -63,15 +63,21 @@ alive on the box so a reconnect lands exactly where you left off.
 Installed by default (`mosh_enabled`); the box opens mosh's UDP range **only on the
 tailscale0 interface**, so connect over Tailscale:
 
+The easiest entry point is the `devbox` command that `gen-editor-config.py` writes
+into your shell rc (one command, profile as an argument):
+
 ```bash
 # phone: Blink or Termius (both speak mosh) + the Tailscale app, OR laptop terminal
-mosh <user>@<tailscale-name-or-100.x> -- tmux new -A -s main
+devbox                 # default profile → persistent tmux (mosh, ssh fallback)
+devbox <profile>       # a specific profile; `devbox <profile> <session>` for a named one
 #   inside the session:
 claude            # drop signal / close the lid → reconnect resumes the same session
 ```
 
-From the laptop you can also just run `scripts/connect.sh mosh <user>` (needs
-`brew install mosh` locally).
+`devbox` is just `mosh <prefix>-<profile> -- tmux new -A -s <session>`; run
+`gen-editor-config.py --host <tailscale-name-or-100.x>` so the alias resolves over
+Tailscale (mosh UDP is tailscale-only). From the laptop you can also run
+`scripts/connect.sh mosh <user>` (needs `brew install mosh` locally).
 
 > **Why not Claude Desktop's integrated SSH for this?** Its remote‑project SSH mode
 > drops the Claude Code session on disconnect with no resume, and times out after
