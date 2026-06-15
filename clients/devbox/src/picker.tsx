@@ -205,3 +205,95 @@ export function pickUI(profiles: PickProfile[], active: string): Promise<{ profi
     );
   });
 }
+
+// ── session picker (devbox push --pick) ──────────────────────────────────────
+
+export type SessionPick = { id: string; mtime: number; firstPrompt: string };
+
+function relTime(ms: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+function SessionPicker({ sessions, onDone }: { sessions: SessionPick[]; onDone: (s: SessionPick | null) => void }) {
+  const [query, setQuery] = useState("");
+  const [row, setRow] = useState(0);
+  const filtered = query ? sessions.filter((s) => fuzzy(`${s.firstPrompt} ${s.id}`, query)) : sessions;
+  const sel = Math.max(0, Math.min(row, filtered.length - 1));
+
+  useInput((input, key) => {
+    if (key.escape || (key.ctrl && input === "c")) return onDone(null);
+    if (key.upArrow) return setRow(Math.max(0, sel - 1));
+    if (key.downArrow) return setRow(Math.min(filtered.length - 1, sel + 1));
+    if (key.return) return void (filtered[sel] && onDone(filtered[sel]));
+    if (key.backspace || key.delete) {
+      setQuery((q) => q.slice(0, -1));
+      setRow(0);
+      return;
+    }
+    if (input && !key.ctrl && !key.meta && !key.tab && !looksLikeMouse(input)) {
+      setQuery((q) => q + input);
+      setRow(0);
+    }
+  });
+
+  const shown = filtered.slice(0, MAX_ROWS);
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Box marginBottom={1}>
+        <Mascot />
+        <Box flexDirection="column">
+          <Text>
+            <Text bold color={CLAY}>
+              devbox push
+            </Text>
+            <Text dimColor>{"  ·  pick a session"}</Text>
+          </Text>
+          <Text dimColor>{query ? <Text color={CLAY}>/{query}</Text> : "type to filter"}</Text>
+        </Box>
+      </Box>
+      <Box flexDirection="column" borderStyle="round" borderColor={CLAY} paddingX={1}>
+        {shown.length === 0 ? (
+          <Text dimColor>{"  — no match —"}</Text>
+        ) : (
+          shown.map((s, i) => (
+            <Row
+              key={s.id}
+              label={`${relTime(s.mtime).padEnd(7)}  ${truncate(s.firstPrompt || s.id, 56)}`}
+              active={i === sel}
+              onClick={() => onDone(s)}
+            />
+          ))
+        )}
+        {filtered.length > MAX_ROWS && <Text dimColor>{`  …${filtered.length - MAX_ROWS} more`}</Text>}
+      </Box>
+      <Box paddingX={1}>
+        <Text dimColor>{"↑↓ move · ↵/click open · esc quit"}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/** Single-pane fuzzy picker over recent sessions. Resolves the chosen session, or null. */
+export function pickSessionUI(sessions: SessionPick[]): Promise<SessionPick | null> {
+  return new Promise((resolve) => {
+    const app = render(
+      <MouseProvider>
+        <SessionPicker
+          sessions={sessions}
+          onDone={(s) => {
+            app.unmount();
+            resolve(s);
+          }}
+        />
+      </MouseProvider>,
+    );
+  });
+}

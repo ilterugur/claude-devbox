@@ -165,7 +165,7 @@ scripts/
   bundle-local-config.sh  connect.sh        (laptop)
 docs/
   multi-account.md  multi-project.md  config-sync.md  runtimes.md
-  mobile.md  realtime-sync.md
+  mobile.md  realtime-sync.md  session-handoff.md
 ```
 
 ## Docs
@@ -177,6 +177,7 @@ docs/
 - [Syncing your Claude config (MCPs/skills/hooks)](docs/config-sync.md)
 - [Driving the box from your phone](docs/mobile.md)
 - [Real-time sync & preview on your laptop](docs/realtime-sync.md)
+- [Moving a session laptop → box (`devbox push`)](docs/session-handoff.md)
 
 ## Security notes
 

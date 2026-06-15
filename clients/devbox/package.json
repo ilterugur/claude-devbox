@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "bun build --compile --minify src/devbox.ts --outfile dist/devbox",
-    "dev": "bun run src/devbox.ts"
+    "dev": "bun run src/devbox.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@zenobius/ink-mouse": "^1.0.3",

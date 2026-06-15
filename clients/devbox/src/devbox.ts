@@ -1,120 +1,30 @@
 #!/usr/bin/env bun
 /**
- * devbox — connect to a claude-devbox profile/project over mosh+tmux (ssh fallback).
+ * devbox — connect to a claude-devbox profile/project over mosh+tmux (ssh fallback),
+ * or `devbox push` a Claude Code session to the box and resume it there.
  *
  * Reads ~/.config/claude-devbox/config.json (written by gen-editor-config.py --cli)
  * and the active-profile state file. Bare `devbox` git-auto-opens the matching box
- * project for $PWD, else shows a fuzzy picker. The remote command is built as an argv
- * ARRAY and spawned (mosh) — no shell quoting — and POSIX-quoted only for the ssh
- * fallback. Set DEVBOX_DRYRUN=1 to print the command instead of running it.
+ * project for $PWD, else shows a fuzzy picker. All domain logic lives in config.ts;
+ * this file is only the cac wiring. Set DEVBOX_DRYRUN=1 to print commands instead.
  */
 import { cac } from "cac";
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import {
+  type Config,
+  connect,
+  die,
+  gitMatch,
+  hostFor,
+  loadConfig,
+  projectsOf,
+  readState,
+  resolveProfile,
+  users,
+  writeState,
+} from "./config";
 import { pickUI } from "./picker";
-
-const CFG_DIR = join(homedir(), ".config", "claude-devbox");
-const CONFIG_PATH = join(CFG_DIR, "config.json");
-const STATE_PATH = join(CFG_DIR, "active-profile");
-
-type Project = { name: string; repo?: string };
-type Profile = { user: string; projects: Project[] };
-type Config = { prefix: string; default: string; locale: string; launch: string; profiles: Profile[] };
-
-function die(msg: string): never {
-  process.stderr.write(`devbox: ${msg}\n`);
-  process.exit(1);
-}
-
-function loadConfig(): Config {
-  if (!existsSync(CONFIG_PATH)) die(`no config at ${CONFIG_PATH} — run gen-editor-config.py --cli`);
-  try {
-    const c = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Config;
-    if (!c.profiles?.length) die("config has no profiles");
-    return c;
-  } catch (e) {
-    die(`could not read ${CONFIG_PATH}: ${(e as Error).message}`);
-  }
-}
-
-const users = (cfg: Config) => cfg.profiles.map((p) => p.user);
-
-function readState(): string | null {
-  try {
-    return readFileSync(STATE_PATH, "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeState(prof: string) {
-  mkdirSync(CFG_DIR, { recursive: true });
-  writeFileSync(STATE_PATH, prof + "\n");
-}
-
-function resolveProfile(cfg: Config, override?: string): string {
-  const prof = override || readState() || cfg.default;
-  if (!users(cfg).includes(prof)) die(`unknown profile "${prof}" (have: ${users(cfg).join(" ")})`);
-  return prof;
-}
-
-/** Normalize a git remote URL to host/owner/repo (lowercased, no scheme/.git). */
-function normRepo(url: string): string {
-  let u = url.trim().toLowerCase();
-  u = u.replace(/^[a-z+]+:\/\//, ""); // scheme
-  u = u.replace(/^git@/, "");
-  u = u.replace(/^[^@/]*@/, ""); // user@
-  u = u.replace(":", "/"); // git@host:path -> host/path
-  u = u.replace(/\/+$/, "");
-  u = u.replace(/\.git$/, "");
-  return u.replace(/\/+$/, "");
-}
-
-function gitMatch(cfg: Config): { profile: string; project: string } | null {
-  if (spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { stdio: "ignore" }).status !== 0) return null;
-  const r = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
-  if (r.status !== 0 || !r.stdout?.trim()) return null;
-  const want = normRepo(r.stdout);
-  for (const p of cfg.profiles)
-    for (const pr of p.projects) if (pr.repo && normRepo(pr.repo) === want) return { profile: p.user, project: pr.name };
-  return null;
-}
-
-/** POSIX single-quote a value for safe embedding in the ssh remote command string. */
-const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
-
-function connect(cfg: Config, prof: string, project: string | null, shellOnly: boolean) {
-  const sess = project ?? "main";
-  const dir = project ? `/home/${prof}/projects/${project}` : `/home/${prof}`;
-  const host = `${cfg.prefix}-${prof}`;
-  const env = { ...process.env, LANG: cfg.locale, LC_ALL: cfg.locale, LC_CTYPE: cfg.locale };
-  const tmux = ["tmux", "new", "-A", "-s", sess, "-c", dir];
-  if (!shellOnly && cfg.launch) tmux.push("bash", "-lc", `${cfg.launch}; exec bash`);
-  // Hide tmux's status bar (the green strip) for this session — chained as a second
-  // tmux command via a literal ";" arg (works for both the mosh argv and the ssh
-  // string, since tmux treats a bare ";" as a command separator).
-  tmux.push(";", "set", "status", "off");
-
-  const useMosh = Bun.which("mosh") != null;
-  // mosh forwards argv after `--` intact (no shell) — clean. ssh joins args into one
-  // remote string, so build a properly-quoted string for it.
-  const cmd = useMosh ? "mosh" : "ssh";
-  const args = useMosh ? [host, "--", ...tmux] : ["-t", host, tmux.map(shQuote).join(" ")];
-
-  if (process.env.DEVBOX_DRYRUN) {
-    process.stdout.write(JSON.stringify([cmd, ...args]) + "\n");
-    return;
-  }
-  const child = spawn(cmd, args, { stdio: "inherit", env });
-  child.on("error", (e) => die(`failed to run ${cmd}: ${e.message}`));
-  child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));
-}
-
-function projectsOf(cfg: Config, prof: string): string[] {
-  return (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
-}
+import { runPush } from "./push";
 
 function newHelp(prof: string) {
   const lines = [
@@ -130,7 +40,7 @@ function newHelp(prof: string) {
   process.stderr.write(lines.join("\n") + "\n");
 }
 
-const cfg = loadConfig();
+const cfg: Config = loadConfig();
 const cli = cac("devbox");
 
 cli
@@ -157,13 +67,42 @@ cli
     const prof = resolveProfile(cfg, profile);
     const env = { ...process.env, LANG: cfg.locale, LC_ALL: cfg.locale, LC_CTYPE: cfg.locale };
     if (process.env.DEVBOX_DRYRUN) {
-      return void process.stdout.write(JSON.stringify(["ssh", `${cfg.prefix}-${prof}`, "tmux ls ..."]) + "\n");
+      return void process.stdout.write(JSON.stringify(["ssh", hostFor(cfg, prof), "tmux ls ..."]) + "\n");
     }
-    const r = spawnSync("ssh", [`${cfg.prefix}-${prof}`, "tmux ls 2>/dev/null || echo '(no open sessions)'"], {
+    const r = spawnSync("ssh", [hostFor(cfg, prof), "tmux ls 2>/dev/null || echo '(no open sessions)'"], {
       stdio: "inherit",
       env,
     });
     process.exit(r.status ?? 0);
+  });
+
+cli
+  .command("push [project]", "copy the current (or picked) session to the box and resume it there")
+  .option("--session <id>", "session id (default: $CLAUDE_CODE_SESSION_ID, else newest in $PWD)")
+  .option("--pick", "fuzzy-pick a recent session for this project")
+  .option("-p, --profile <profile>", "target profile (required when origin is unmatched/ambiguous)")
+  .option("--remote-cwd <dir>", "override the remote project root (required for worktree sources)")
+  .option("--map <pair>", "extra path mapping OLD=NEW (repeatable)")
+  .option("--remap-home", "also remap /Users/<you> -> /home/<profile>")
+  .option("--no-sidecar", "do not transfer the <id>/ sidecar dir")
+  .option("--go", "after push, connect and `claude --resume` on the box")
+  .option("--yes", "skip the confirmation prompt")
+  .option("--force", "overwrite even if the remote copy is live or newer")
+  .action(async (project: string | undefined, opts: Record<string, unknown>) => {
+    const maps = opts.map ? (Array.isArray(opts.map) ? (opts.map as string[]) : [opts.map as string]) : [];
+    await runPush(cfg, {
+      project,
+      session: opts.session as string | undefined,
+      pick: !!opts.pick,
+      profile: opts.profile as string | undefined,
+      remoteCwd: opts.remoteCwd as string | undefined,
+      map: maps,
+      remapHome: !!opts.remapHome,
+      sidecar: opts.sidecar !== false,
+      go: !!opts.go,
+      yes: !!opts.yes,
+      force: !!opts.force,
+    });
   });
 
 cli
@@ -173,18 +112,18 @@ cli
   .option("-s, --shell", "open a plain shell (skip the auto-launch)")
   .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean }) => {
     const prof = resolveProfile(cfg, opts.profile);
-    if (project) return connect(cfg, prof, project, !!opts.shell);
+    if (project) return connect(cfg, prof, project, { shellOnly: !!opts.shell });
     if (!opts.menu) {
       const m = gitMatch(cfg);
-      if (m) return connect(cfg, m.profile, m.project, !!opts.shell);
+      if (m.length) return connect(cfg, m[0].profile, m[0].project, { shellOnly: !!opts.shell });
     }
     const profilesList = cfg.profiles.map((p) => ({ user: p.user, projects: projectsOf(cfg, p.user) }));
     const { profile, result } = await pickUI(profilesList, prof);
     if (result === null) return; // cancelled
     if (profile !== prof) writeState(profile); // persist an in-picker profile switch
-    if (result === "__home__") return connect(cfg, profile, null, !!opts.shell);
+    if (result === "__home__") return connect(cfg, profile, null, { shellOnly: !!opts.shell });
     if (result === "__new__") return newHelp(profile);
-    return connect(cfg, profile, result, !!opts.shell);
+    return connect(cfg, profile, result, { shellOnly: !!opts.shell });
   });
 
 cli.help();

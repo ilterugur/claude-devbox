@@ -398,6 +398,16 @@ def install_cli(repo, prefix):
     print(f"  ✓ installed `{prefix}` -> ~/.local/bin/{prefix} (runs the Bun CLI)")
     if bindir not in os.environ.get("PATH", "").split(os.pathsep):
         print(f"  ! ~/.local/bin is not on your PATH — add: export PATH=\"$HOME/.local/bin:$PATH\"")
+    # Install the /<prefix>-push slash command (session handoff) into ~/.claude/commands/.
+    cmd_src = os.path.join(cli_dir, "commands", "devbox-push.md")
+    if os.path.exists(cmd_src):
+        cmds_dir = os.path.expanduser("~/.claude/commands")
+        os.makedirs(cmds_dir, exist_ok=True)
+        with open(cmd_src) as f:
+            body = f.read().replace("__PREFIX__", prefix)
+        with open(os.path.join(cmds_dir, f"{prefix}-push.md"), "w") as f:
+            f.write(body)
+        print(f"  ✓ installed `/{prefix}-push` -> ~/.claude/commands/{prefix}-push.md")
     return wrapper
 
 
