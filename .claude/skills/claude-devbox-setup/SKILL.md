@@ -164,6 +164,12 @@ These can't be fully automated; walk the user through them:
   Claude on a fresh session (the command pins LANG/LC_ALL/LC_CTYPE so a macOS region locale
   like en_TR.UTF-8 doesn't break mosh-server). Re-running is safe:
   existing blocks are updated in place, not duplicated.
+  - **`--cli`** (when the client has **bun**): installs the Bun/TS CLI at
+    `clients/devbox/` instead of the shell function — a fuzzy picker (`@clack/prompts`,
+    no fzf), git-auto-open of the matching local repo, and an argv-array launch (no
+    shell-quoting pitfalls). It writes `~/.config/claude-devbox/config.json`, drops a
+    `~/.local/bin/<prefix>` wrapper, and removes the shell function so it isn't shadowed.
+    Omit `--cli` for clients without bun (e.g. the phone) to keep the shell function.
 - Point the user to daily use: connect the **desktop app / VS Code Remote-SSH /
   Zed as a profile** (e.g. `devbox-work`), drive from the **mobile app** per
   profile, and preview dev servers (`docs/realtime-sync.md`, `docs/mobile.md`).
