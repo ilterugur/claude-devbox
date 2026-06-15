@@ -1,0 +1,80 @@
+/**
+ * sync.ts — `devbox sync`: a persistent two-way "disk" per profile
+ * (~/devbox/<profile> <-> /home/<profile>/sync) driven by the configured engine.
+ * planSync is pure (tested); runSync* orchestrate (honor DEVBOX_DRYRUN).
+ */
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  die, hostFor, lazyMountsFor, syncDiskEnabled, syncEngineFor, type Config, type EngineId,
+} from "./config";
+import { normalizePath, pathsOverlap, syncDiskRoot } from "./bridge";
+import { DEFAULT_IGNORES, engineFor } from "./sync/engine";
+
+export type SyncPlan = { localRoot: string; remoteRoot: string; host: string; engine: EngineId };
+
+export function planSync(cfg: Config, profile: string): SyncPlan {
+  if (!syncDiskEnabled(cfg, profile)) die(`sync disk is not enabled for "${profile}" (set sync_disk: true)`);
+  const localRoot = syncDiskRoot(profile);
+  for (const m of lazyMountsFor(cfg, profile))
+    if (pathsOverlap(normalizePath(m.path), localRoot))
+      die(`lazy mount "${m.label}" overlaps the sync disk ${localRoot} — a folder is either mounted or synced`);
+  return { localRoot, remoteRoot: `/home/${profile}/sync`, host: hostFor(cfg, profile), engine: syncEngineFor(cfg, profile) };
+}
+
+const isDry = () => !!process.env.DEVBOX_DRYRUN;
+const out = (s: string) => process.stdout.write(s + "\n");
+
+const README = `# devbox sync disk
+
+Anything in this folder is continuously TWO-WAY synced to the box at /home/<profile>/sync and
+stays available there even when this laptop is closed.
+
+- Edits flow both ways. Conflicts are surfaced (run \`devbox sync status\`), never auto-merged.
+- These are ignored (never synced): .git, node_modules, dist, build, .next, target.
+- This is for trusted code you work on — not a place to receive untrusted output.
+- Deleting here deletes on the box too. Git is your real history/undo.
+`;
+
+export async function runSyncUp(cfg: Config, profile: string): Promise<void> {
+  const plan = planSync(cfg, profile);
+  if (isDry()) return void out(`  ── would sync ${plan.localRoot} <-> ${plan.host}:${plan.remoteRoot} via ${plan.engine}`);
+  if (plan.engine === "mutagen" && !Bun.which("mutagen"))
+    die("mutagen not found — install it: brew install mutagen-io/mutagen/mutagen");
+  mkdirSync(plan.localRoot, { recursive: true });
+  const readme = join(plan.localRoot, "README.md");
+  if (!existsSync(readme)) writeFileSync(readme, README);
+  await engineFor(plan.engine).up({ profile, host: plan.host, localRoot: plan.localRoot, remoteRoot: plan.remoteRoot, ignores: DEFAULT_IGNORES });
+  out(`  ✓ syncing ${plan.localRoot} <-> ${plan.host}:${plan.remoteRoot} (${plan.engine})`);
+}
+
+export async function runSyncDown(cfg: Config, profile: string): Promise<void> {
+  const plan = planSync(cfg, profile);
+  if (isDry()) return void out(`  ── would stop sync for ${profile} (${plan.engine})`);
+  await engineFor(plan.engine).down(profile);
+  out(`  ✓ stopped sync for ${profile}`);
+}
+
+export async function runSyncPause(cfg: Config, profile: string, resume: boolean): Promise<void> {
+  const plan = planSync(cfg, profile);
+  if (isDry()) return void out(`  ── would ${resume ? "resume" : "pause"} sync for ${profile}`);
+  const e = engineFor(plan.engine);
+  await (resume ? e.resume(profile) : e.pause(profile));
+  out(`  ✓ ${resume ? "resumed" : "paused"} ${profile}`);
+}
+
+/** Status across ALL configured engines (so a mixed Mutagen+Syncthing setup shows both). */
+export async function runSyncStatus(cfg: Config): Promise<void> {
+  const seen = new Set<EngineId>();
+  let any = false;
+  for (const p of cfg.profiles) {
+    const id = syncEngineFor(cfg, p.user);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const s of await engineFor(id).status()) {
+      any = true;
+      out(`  [${id}] ${s.name}  ${s.state}${s.conflicts ? `  ⚠ ${s.conflicts} conflict(s)` : ""}`);
+    }
+  }
+  if (!any) out("devbox: no active sync sessions");
+}

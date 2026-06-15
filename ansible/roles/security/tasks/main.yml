@@ -83,3 +83,17 @@
     fail_msg: >-
       sshd has AllowTcpForwarding disabled; devbox lazy mounts (ssh -R) will not work.
       Remove that directive from the hardening config.
+
+- name: Check sshd has an SFTP subsystem (Mutagen agent install uses scp/sftp)
+  ansible.builtin.shell: >-
+    grep -RqsiE '^[[:space:]]*Subsystem[[:space:]]+sftp' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/
+  register: _sftp_present
+  changed_when: false
+  failed_when: false
+
+- name: Assert the SFTP subsystem is present
+  ansible.builtin.assert:
+    that: _sftp_present.rc == 0
+    fail_msg: >-
+      sshd has no SFTP subsystem; Mutagen cannot install its agent (devbox sync, Mutagen engine).
+      Restore `Subsystem sftp /usr/lib/openssh/sftp-server` in /etc/ssh/sshd_config.

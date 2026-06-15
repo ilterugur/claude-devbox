@@ -28,6 +28,7 @@ import {
 import { pickUI } from "./picker";
 import { runPush } from "./push";
 import { runMountUp, runMountDown, runMountStatus } from "./mount";
+import { runSyncUp, runSyncDown, runSyncStatus, runSyncPause } from "./sync";
 
 function newHelp(prof: string) {
   const lines = [
@@ -119,6 +120,21 @@ cli
       case "down": return runMountDown(cfg, prof, opts.label);
       case "status": return runMountStatus();
       default: return die(`unknown mount action "${action}" (up|down|status)`);
+    }
+  });
+
+cli
+  .command("sync [action]", "two-way sync the ~/devbox/<profile> disk with the box (action: up|down|status|pause|resume)")
+  .option("-p, --profile <profile>", "target profile")
+  .action(async (action: string | undefined, opts: { profile?: string }) => {
+    if ((action ?? "up") === "status") return runSyncStatus(cfg);
+    const prof = resolveProfile(cfg, opts.profile);
+    switch (action ?? "up") {
+      case "up": return runSyncUp(cfg, prof);
+      case "down": return runSyncDown(cfg, prof);
+      case "pause": return runSyncPause(cfg, prof, false);
+      case "resume": return runSyncPause(cfg, prof, true);
+      default: return die(`unknown sync action "${action}" (up|down|status|pause|resume)`);
     }
   });
 
