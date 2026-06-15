@@ -8,12 +8,12 @@
  * ARRAY and spawned (mosh) — no shell quoting — and POSIX-quoted only for the ssh
  * fallback. Set DEVBOX_DRYRUN=1 to print the command instead of running it.
  */
-import { autocomplete, isCancel, note, select } from "@clack/prompts";
 import { cac } from "cac";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pickUI } from "./picker";
 
 const CFG_DIR = join(homedir(), ".config", "claude-devbox");
 const CONFIG_PATH = join(CFG_DIR, "config.json");
@@ -92,6 +92,10 @@ function connect(cfg: Config, prof: string, project: string | null, shellOnly: b
   const env = { ...process.env, LANG: cfg.locale, LC_ALL: cfg.locale, LC_CTYPE: cfg.locale };
   const tmux = ["tmux", "new", "-A", "-s", sess, "-c", dir];
   if (!shellOnly && cfg.launch) tmux.push("bash", "-lc", `${cfg.launch}; exec bash`);
+  // Hide tmux's status bar (the green strip) for this session — chained as a second
+  // tmux command via a literal ";" arg (works for both the mosh argv and the ssh
+  // string, since tmux treats a bare ";" as a command separator).
+  tmux.push(";", "set", "status", "off");
 
   const useMosh = Bun.which("mosh") != null;
   // mosh forwards argv after `--` intact (no shell) — clean. ssh joins args into one
@@ -108,53 +112,22 @@ function connect(cfg: Config, prof: string, project: string | null, shellOnly: b
   child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));
 }
 
-/** Subsequence fuzzy match (e.g. "isc" matches "insurchat"). */
-function fuzzy(label: string, search: string): boolean {
-  const s = label.toLowerCase();
-  const q = search.toLowerCase();
-  let i = 0;
-  for (const c of s) if (c === q[i]) i++;
-  return i === q.length;
-}
-
-async function pick(cfg: Config, prof: string): Promise<string | null> {
-  const projects = (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
-  // Level 1 — a tiny fixed branch menu, so the actions are never buried in (and never
-  // grow with) the project list. "open a project" leads to the fuzzy project picker.
-  const branch = await select({
-    message: `devbox · ${prof}`,
-    options: [
-      ...(projects.length
-        ? [{ value: "__project__", label: "open a project", hint: `${projects.length} project${projects.length > 1 ? "s" : ""} — fuzzy search` }]
-        : []),
-      { value: "__home__", label: "⌂  open in HOME", hint: "no project" },
-      { value: "__new__", label: "＋  new project", hint: "how to add one" },
-    ],
-  });
-  if (isCancel(branch)) return null;
-  if (branch === "__home__" || branch === "__new__") return branch;
-  // Level 2 — the clean fuzzy project list (scales to many projects).
-  const proj = await autocomplete({
-    message: `devbox · ${prof} › project`,
-    placeholder: "type to filter…",
-    options: projects.map((p) => ({ value: p, label: p })),
-    filter: (search, option) => !search || fuzzy(String(option.label ?? option.value), search),
-  });
-  return isCancel(proj) ? null : (proj as string);
+function projectsOf(cfg: Config, prof: string): string[] {
+  return (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
 }
 
 function newHelp(prof: string) {
-  note(
-    [
-      `Edit the claude-devbox repo, then re-run the playbook:`,
-      `  1) ansible/group_vars/all.yml — add under ${prof}'s projects:`,
-      `       - { name: myproj, repo: "git@github.com:org/myproj.git", branch: main }`,
-      `  2) cd ansible && ansible-playbook -i inventory.ini playbook.yml --tags projects`,
-      `  3) private repo? add the profile's SSH key to GitHub, then re-run.`,
-      `  Then:  devbox myproj`,
-    ].join("\n"),
-    "Add a new project",
-  );
+  const lines = [
+    "",
+    `  Add a new project to profile '${prof}' (edit the claude-devbox repo, re-run the playbook):`,
+    `    1) ansible/group_vars/all.yml — add under that profile's projects:`,
+    `         - { name: myproj, repo: "git@github.com:org/myproj.git", branch: main }`,
+    `    2) cd ansible && ansible-playbook -i inventory.ini playbook.yml --tags projects`,
+    `    3) private repo? add the profile's SSH key to GitHub, then re-run.`,
+    `    Then:  devbox myproj`,
+    "",
+  ];
+  process.stderr.write(lines.join("\n") + "\n");
 }
 
 const cfg = loadConfig();
@@ -163,7 +136,16 @@ const cli = cac("devbox");
 cli
   .command("use [profile]", "show, or set, the remembered active profile")
   .action((profile?: string) => {
-    if (!profile) return void console.log(`active profile: ${readState() ?? cfg.default}`);
+    const active = readState() ?? cfg.default;
+    if (!profile) {
+      console.log(`active profile: ${active}`);
+      if (users(cfg).length > 1) {
+        console.log("profiles:");
+        for (const u of users(cfg)) console.log(`  ${u === active ? "●" : "○"} ${u}`);
+        console.log(`switch with:  devbox use <profile>   (or ⌃p in the picker)`);
+      }
+      return;
+    }
     if (!users(cfg).includes(profile)) die(`unknown profile "${profile}" (have: ${users(cfg).join(" ")})`);
     writeState(profile);
     console.log(`active profile -> ${profile}`);
@@ -196,11 +178,13 @@ cli
       const m = gitMatch(cfg);
       if (m) return connect(cfg, m.profile, m.project, !!opts.shell);
     }
-    const sel = await pick(cfg, prof);
-    if (sel === null) return; // cancelled
-    if (sel === "__home__") return connect(cfg, prof, null, !!opts.shell);
-    if (sel === "__new__") return newHelp(prof);
-    return connect(cfg, prof, sel, !!opts.shell);
+    const profilesList = cfg.profiles.map((p) => ({ user: p.user, projects: projectsOf(cfg, p.user) }));
+    const { profile, result } = await pickUI(profilesList, prof);
+    if (result === null) return; // cancelled
+    if (profile !== prof) writeState(profile); // persist an in-picker profile switch
+    if (result === "__home__") return connect(cfg, profile, null, !!opts.shell);
+    if (result === "__new__") return newHelp(profile);
+    return connect(cfg, profile, result, !!opts.shell);
   });
 
 cli.help();
