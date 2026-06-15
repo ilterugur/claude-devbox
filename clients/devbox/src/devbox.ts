@@ -8,7 +8,7 @@
  * ARRAY and spawned (mosh) — no shell quoting — and POSIX-quoted only for the ssh
  * fallback. Set DEVBOX_DRYRUN=1 to print the command instead of running it.
  */
-import { autocomplete, isCancel, note } from "@clack/prompts";
+import { autocomplete, isCancel, note, select } from "@clack/prompts";
 import { cac } from "cac";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -119,23 +119,28 @@ function fuzzy(label: string, search: string): boolean {
 
 async function pick(cfg: Config, prof: string): Promise<string | null> {
   const projects = (cfg.profiles.find((p) => p.user === prof)?.projects ?? []).map((p) => p.name);
-  const sel = await autocomplete({
+  // Level 1 — a tiny fixed branch menu, so the actions are never buried in (and never
+  // grow with) the project list. "open a project" leads to the fuzzy project picker.
+  const branch = await select({
     message: `devbox · ${prof}`,
-    placeholder: projects.length ? "type to filter projects…" : "no projects yet — pick an action",
-    // Projects up top (the fuzzy list); the two actions pinned at the bottom, set apart
-    // by a dimmed hint on the right. The custom filter keeps the actions always visible.
     options: [
-      ...projects.map((p) => ({ value: p, label: p })),
-      { value: "__home__", label: "⌂  home", hint: "no project · open in ~" },
-      { value: "__new__", label: "＋  new project", hint: "show how to add one" },
+      ...(projects.length
+        ? [{ value: "__project__", label: "open a project", hint: `${projects.length} project${projects.length > 1 ? "s" : ""} — fuzzy search` }]
+        : []),
+      { value: "__home__", label: "⌂  open in HOME", hint: "no project" },
+      { value: "__new__", label: "＋  new project", hint: "how to add one" },
     ],
-    filter: (search, option) =>
-      option.value === "__home__" ||
-      option.value === "__new__" ||
-      !search ||
-      fuzzy(String(option.label ?? option.value), search),
   });
-  return isCancel(sel) ? null : (sel as string);
+  if (isCancel(branch)) return null;
+  if (branch === "__home__" || branch === "__new__") return branch;
+  // Level 2 — the clean fuzzy project list (scales to many projects).
+  const proj = await autocomplete({
+    message: `devbox · ${prof} › project`,
+    placeholder: "type to filter…",
+    options: projects.map((p) => ({ value: p, label: p })),
+    filter: (search, option) => !search || fuzzy(String(option.label ?? option.value), search),
+  });
+  return isCancel(proj) ? null : (proj as string);
 }
 
 function newHelp(prof: string) {
