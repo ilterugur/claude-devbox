@@ -22,11 +22,15 @@ backs up each file first. Zed is skipped unless Zed is installed or --zed is giv
        [--default PROFILE] [--launch CMD] [--locale L] [--no-zed|--zed]
        [--no-shell|--shell-rc PATH]
 
-The generated `<prefix>` command supports: `<prefix>` (default profile, HOME),
-`<prefix> <project>` / `<prefix> <profile> <project>` (open in ~/projects/<project>),
-`<prefix> ls [profile]` (list open tmux sessions), and — when --launch is set —
-`<prefix> -s [...]` (plain shell, skip the auto-launched command). The tmux session is
-named after the project, so each project keeps its own re-attachable session.
+The generated `<prefix>` command uses a remembered ACTIVE profile:
+  <prefix>                    active profile, in HOME
+  <prefix> <project>          active profile, in ~/projects/<project>
+  <prefix> -p <profile> [proj] override the profile for one call
+  <prefix> use [<profile>]    show, or set, the remembered active profile
+  <prefix> ls [profile]       list open tmux sessions
+  <prefix> -s [project]       plain shell (skip the --launch command), when --launch is set
+The tmux session is named after the project, so each project keeps its own re-attachable
+session. The active profile is persisted in ~/.config/claude-devbox/active-profile.
 """
 import argparse
 import json
