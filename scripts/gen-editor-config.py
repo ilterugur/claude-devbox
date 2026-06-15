@@ -145,93 +145,162 @@ def write_zed(entries, prefix, forced):
     print(f"  ✓ ~/.config/zed/settings.json updated (backup alongside if it existed)")
 
 
+def norm_repo(url):
+    """Normalize a git remote URL to host/owner/repo (lowercased, no scheme/.git) so
+    https and git@ forms of the same repo compare equal. Must mirror the shell `_norm`."""
+    u = url.strip().lower()
+    u = re.sub(r"^[a-z+]+://", "", u)   # scheme
+    u = re.sub(r"^git@", "", u)
+    u = re.sub(r"^[^@/]*@", "", u)       # user@
+    u = u.replace(":", "/", 1)           # git@host:path -> host/path
+    u = u.rstrip("/")
+    u = re.sub(r"\.git$", "", u)
+    return u.rstrip("/")
+
+
+# Bash template for the connect command. @@PLACEHOLDERS@@ are substituted in shell_block.
+_DEVBOX_TEMPLATE = r'''_@@PFX@@_norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed -E 's#^[a-z+]+://##; s#^git@##; s#^[^@/]*@##; s#:#/#; s#/+$##; s#\.git$##; s#/+$##'; }
+_@@PFX@@_q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }  # POSIX single-quote a value
+_@@PFX@@_match() {  # echo "<profile> <project>" if $PWD's git origin is a known box project
+  command -v git >/dev/null 2>&1 || return 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  local u; u="$(git remote get-url origin 2>/dev/null)"; [ -n "$u" ] || return 1
+  case "$(_@@PFX@@_norm "$u")" in
+@@REPOCASES@@    *) return 1 ;;
+  esac
+}
+_@@PFX@@_projects() {  # echo a profile's known projects, one per line
+  case "${1:-}" in
+@@PROJCASES@@    *) ;;
+  esac
+}
+_@@PFX@@_newhelp() {
+  cat >&2 <<'EOH'
+To add a project on the box, edit the claude-devbox repo then re-run the playbook:
+  1) ansible/group_vars/all.yml -> add under that profile's projects:
+       - { name: myproj, repo: "git@github.com:org/myproj.git", branch: main }
+  2) cd ansible && ansible-playbook -i inventory.ini playbook.yml --tags projects
+  3) private repo? add the profile's SSH key to GitHub, then re-run.
+Then connect with:  @@PFX@@ myproj
+EOH
+}
+_@@PFX@@_pick() {  # $1=profile; echo __home__ | __new__ | <project>; non-zero on cancel
+  local prof="$1" items sel HOME_ITEM NEW_ITEM
+  HOME_ITEM="[ open in HOME - no project ]"
+  NEW_ITEM="[ + create a new project ]"
+  items="$(printf '%s\n%s\n' "$HOME_ITEM" "$NEW_ITEM"; _@@PFX@@_projects "$prof")"
+  if command -v fzf >/dev/null 2>&1; then
+    sel="$(printf '%s\n' "$items" | fzf --prompt="@@PFX@@ $prof > " --height=40% --reverse --no-multi --no-sort)" || return 1
+  else
+    { printf 'Select for profile %s (number):\n' "$prof"; printf '%s\n' "$items" | nl -ba -w2 -s') '; printf 'number > '; } >&2
+    local n; IFS= read -r n || return 1
+    case "$n" in ''|*[!0-9]*) return 1 ;; esac
+    sel="$(printf '%s\n' "$items" | sed -n "${n}p" 2>/dev/null)"
+  fi
+  [ -n "$sel" ] || return 1
+  if [ "$sel" = "$HOME_ITEM" ]; then echo __home__
+  elif [ "$sel" = "$NEW_ITEM" ]; then echo __new__
+  else echo "$sel"; fi
+}
+@@PFX@@() {
+  local STATE="$HOME/.config/claude-devbox/active-profile"
+  local prof proj sess dir h nolaunch= povr= menu=
+  if [ "${1:-}" = use ] || [ "${1:-}" = profile ]; then
+    if [ -z "${2:-}" ]; then prof="$(cat "$STATE" 2>/dev/null)"; echo "active profile: ${prof:-@@DEFAULT@@}"; return; fi
+    case " @@USERS@@ " in *" $2 "*) ;; *) @@BADP@@ "$2" >&2; return 1 ;; esac
+    mkdir -p "${STATE%/*}" && printf '%s\n' "$2" > "$STATE" && echo "active profile -> $2"; return
+  fi
+  if [ "${1:-}" = ls ] || [ "${1:-}" = -l ] || [ "${1:-}" = --list ]; then
+    povr="${2:-}"; @@RESOLVE@@
+    case " @@USERS@@ " in *" $prof "*) ;; *) @@BADP@@ "$prof" >&2; return 1 ;; esac
+    @@LOC@@ ssh "@@PFX@@-$prof" "tmux ls 2>/dev/null || echo '(no open sessions)'"; return
+  fi
+  while [ $# -gt 0 ]; do case "$1" in
+    -p|--profile) povr="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+    -m|--menu|--pick) menu=1; shift ;;
+@@SFLAG@@    --) shift; break ;;
+    -?*) printf '@@PFX@@: unknown option %s\n' "$1" >&2; return 1 ;;
+    *) break ;;
+  esac; done
+  @@RESOLVE@@
+  case " @@USERS@@ " in *" $prof "*) ;; *) @@BADP@@ "$prof" >&2; return 1 ;; esac
+  proj="${1:-}"
+  if [ -z "$proj" ]; then
+    if [ -z "$menu" ]; then local m; if m="$(_@@PFX@@_match)"; then prof="${m%% *}"; proj="${m#* }"; fi; fi
+    if [ -z "$proj" ]; then
+      local sel; sel="$(_@@PFX@@_pick "$prof")" || return 0
+      if [ "$sel" = __home__ ]; then proj=
+      elif [ "$sel" = __new__ ]; then _@@PFX@@_newhelp; return 0
+      else proj="$sel"; fi
+    fi
+  fi
+  if [ -n "$proj" ]; then sess="$proj"; dir="/home/$prof/projects/$proj"; else sess=main; dir="/home/$prof"; fi
+  h="@@PFX@@-$prof"
+@@CONNECT@@
+}'''
+
+
 def shell_block(profiles, prefix, default, locale, launch):
     users = " ".join(p["user"] for p in profiles)
-    # Pin LANG/LC_ALL/LC_CTYPE: mosh hands the client's locale to mosh-server, and a
-    # macOS region locale (e.g. en_TR.UTF-8, or a bare LC_CTYPE=UTF-8) that Linux can't
-    # provide makes mosh-server fail to start or bash warn. LC_CTYPE must be pinned too.
     loc = f"LANG={locale} LC_ALL={locale} LC_CTYPE={locale}"
-    badp = f'printf "{prefix}: unknown profile \'%s\' (have: {users})\\n"'
-    # resolve the active profile: override ($povr) > state file > baked default
-    resolve = (f'prof="$povr"; [ -n "$prof" ] || prof="$(cat "$STATE" 2>/dev/null)"; '
-               f'[ -n "$prof" ] || prof="{default}"')
-    out = [
-        BEGIN,
-        f"# `{prefix} [project]` — mosh+tmux (falls back to ssh) into a persistent session for",
-        "# the ACTIVE profile, so a dropped connection never loses work. The active profile is",
-        f"# selected once and remembered; pass `-p <profile>` to override a single call.",
-        f"#   {prefix}                   active profile, in HOME (no project)",
+    badp = f"printf '{prefix}: unknown profile \"%s\" (have: {users})\\n'"
+    resolve = ('prof="$povr"; [ -n "$prof" ] || prof="$(cat "$STATE" 2>/dev/null)"; '
+               '[ -n "$prof" ] || prof="@@DEFAULT@@"')
+    run = f"bash -lc '{launch}; exec bash'" if launch else ""
+    sflag = "    -s|--shell) nolaunch=1; shift ;;\n" if launch else ""
+    if launch:
+        connect = (
+            '  if command -v mosh >/dev/null 2>&1; then\n'
+            '    if [ -n "$nolaunch" ]; then @@LOC@@ mosh "$h" -- tmux new -A -s "$sess" -c "$dir"\n'
+            '    else @@LOC@@ mosh "$h" -- tmux new -A -s "$sess" -c "$dir" "@@RUN@@"; fi\n'
+            '  else\n'
+            "    if [ -n \"$nolaunch\" ]; then @@LOC@@ ssh -t \"$h\" \"tmux new -A -s $(_@@PFX@@_q \"$sess\") -c $(_@@PFX@@_q \"$dir\")\"\n"
+            "    else @@LOC@@ ssh -t \"$h\" \"tmux new -A -s $(_@@PFX@@_q \"$sess\") -c $(_@@PFX@@_q \"$dir\") \\\"@@RUN@@\\\"\"; fi\n"
+            '  fi'
+        )
+    else:
+        connect = (
+            '  if command -v mosh >/dev/null 2>&1; then @@LOC@@ mosh "$h" -- tmux new -A -s "$sess" -c "$dir"\n'
+            "  else @@LOC@@ ssh -t \"$h\" \"tmux new -A -s $(_@@PFX@@_q \"$sess\") -c $(_@@PFX@@_q \"$dir\")\"; fi"
+        )
+    # git auto-detect map (normalized repo -> "profile project") + per-profile project lists
+    repo_arms, proj_arms = [], []
+    for p in profiles:
+        names = [pr["name"] for pr in (p.get("projects") or [])]
+        if names:
+            proj_arms.append(f"    {p['user']}) printf '%s\\n' {' '.join(names)} ;;")
+        for pr in (p.get("projects") or []):
+            if pr.get("repo"):
+                repo_arms.append(f"    {norm_repo(pr['repo'])}) echo '{p['user']} {pr['name']}'; return 0 ;;")
+    repocases = ("\n".join(repo_arms) + "\n") if repo_arms else ""
+    projcases = ("\n".join(proj_arms) + "\n") if proj_arms else ""
+
+    body = _DEVBOX_TEMPLATE
+    for ph, val in (("@@CONNECT@@", connect), ("@@SFLAG@@", sflag), ("@@BADP@@", badp),
+                    ("@@RESOLVE@@", resolve), ("@@REPOCASES@@", repocases), ("@@PROJCASES@@", projcases)):
+        body = body.replace(ph, val)
+    for ph, val in (("@@RUN@@", run), ("@@LOC@@", loc), ("@@USERS@@", users),
+                    ("@@DEFAULT@@", default), ("@@PFX@@", prefix)):
+        body = body.replace(ph, val)
+
+    head = [
+        f"# `{prefix} [project]` — mosh+tmux (falls back to ssh) into a persistent session.",
+        "# Uses a remembered ACTIVE profile (set once via `use`). Bare `" + prefix + "` opens an",
+        "# interactive picker (fuzzy when fzf is installed) of HOME / new / your projects —",
+        "# unless run inside a local git repo that matches a box project, which it opens",
+        "# directly (use `-m` to force the picker).",
+        f"#   {prefix}                   pick — or git-auto-open — for the active profile",
         f"#   {prefix} <project>         active profile, in ~/projects/<project>",
-        f"#   {prefix} -p <profile> [project]   use <profile> for this call only",
+        f"#   {prefix} -p <profile> ...  use <profile> for this call only",
+        f"#   {prefix} -m                force the picker (skip git auto-open)",
         f"#   {prefix} use [<profile>]   show, or set, the remembered active profile",
-        f"#   {prefix} ls [profile]      list open (attachable) tmux sessions",
+        f"#   {prefix} ls [profile]      list open tmux sessions",
     ]
     if launch:
-        out += [
-            f"#   {prefix} -s [project]      open a plain shell (skip the auto-`{launch}`)",
-            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); the tmux session is",
-            "# named after the project. mosh needs this client on the box's Tailscale net (mosh",
-            "# UDP is tailscale-only); `brew install mosh` / Blink / Termius provide the client.",
-        ]
-    else:
-        out += [
-            "# The tmux session is named after the project. mosh needs this client on the box's",
-            "# Tailscale net (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius.",
-        ]
-    out += [
-        f"{prefix}() {{",
-        f'  local STATE="$HOME/.config/claude-devbox/active-profile"',
-        f"  local prof proj sess dir h nolaunch= povr=",
-        # use [<profile>] — show or persist the active profile
-        f'  if [ "${{1:-}}" = use ] || [ "${{1:-}}" = profile ]; then',
-        f'    if [ -z "${{2:-}}" ]; then prof="$(cat "$STATE" 2>/dev/null)"; echo "active profile: ${{prof:-{default}}}"; return; fi',
-        f'    case " {users} " in *" $2 "*) ;; *) {badp} "$2" >&2; return 1 ;; esac',
-        f'    mkdir -p "${{STATE%/*}}" && printf "%s\\n" "$2" > "$STATE" && echo "active profile -> $2"; return',
-        f'  fi',
-        # ls [<profile>] — list sessions for the given/active profile
-        f'  if [ "${{1:-}}" = ls ] || [ "${{1:-}}" = -l ] || [ "${{1:-}}" = --list ]; then',
-        f'    povr="${{2:-}}"; {resolve}',
-        f'    case " {users} " in *" $prof "*) ;; *) {badp} "$prof" >&2; return 1 ;; esac',
-        f'''    {loc} ssh "{prefix}-$prof" "tmux ls 2>/dev/null || echo '(no open sessions)'"; return''',
-        f'  fi',
-        # flags: -p <profile> (one-call override)' + (-s) ; then positional <project>
-        f'  while [ $# -gt 0 ]; do case "$1" in',
-        f'    -p|--profile) povr="$2"; shift; [ $# -gt 0 ] && shift ;;',
-    ]
-    if launch:
-        out += [f'    -s|--shell) nolaunch=1; shift ;;']
-    out += [
-        f'    --) shift; break ;;',
-        f'    -?*) printf "{prefix}: unknown option %s\\n" "$1" >&2; return 1 ;;',
-        f'    *) break ;;',
-        f'  esac; done',
-        f'  {resolve}',
-        f'  case " {users} " in *" $prof "*) ;; *) {badp} "$prof" >&2; return 1 ;; esac',
-        f'  proj="${{1:-}}"',
-        f'  if [ -n "$proj" ]; then sess="$proj"; dir="/home/$prof/projects/$proj"; else sess=main; dir="/home/$prof"; fi',
-        f'  h="{prefix}-$prof"',
-    ]
-    if launch:
-        # Run <launch> via a LOGIN shell (bash -lc) so ~/.local/bin + mise are on PATH —
-        # tmux runs its command through a bare `sh -c`, where `claude` wouldn't be found.
-        # tmux's -c sets the start dir; `exec bash` keeps the session alive after it exits.
-        run = f"bash -lc '{launch}; exec bash'"
-        out += [
-            f'  if command -v mosh >/dev/null 2>&1; then',
-            f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
-            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir" "{run}"; fi''',
-            f'  else',
-            f'''    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir'"''',
-            f'''    else {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir' \\"{run}\\""; fi''',
-            f'  fi',
-        ]
-    else:
-        out += [
-            f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
-            f'''  else {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir'"; fi''',
-        ]
-    out += ["}", END]
-    return "\n".join(out) + "\n"
+        head.append(f"#   {prefix} -s [project]      plain shell (skip the auto-`{launch}`)")
+    head.append("# mosh needs this client on the box's Tailscale net (mosh UDP is tailscale-only).")
+
+    return BEGIN + "\n" + "\n".join(head) + "\n" + body + "\n" + END + "\n"
 
 
 def shell_rc_path(override):
