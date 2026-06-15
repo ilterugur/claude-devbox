@@ -72,9 +72,10 @@ claude_config_src: "{{ playbook_dir }}/../claude-config/shared"
 claude_sync_settings: false # settings.json/hooks are machine-coupled; opt in
 
 # ── Server-side headless browser use (ON by default) ─────────────────────────
-#  Installs Google Chrome and wires Playwright MCP into every profile, so the
-#  agent on the box can drive a headless browser (navigate/click/fill/snapshot,
-#  plus console + network inspection) — e.g. to test your web app. This is NOT
+#  Installs Google Chrome and wires Playwright + Chrome DevTools MCP into every
+#  profile, so the agent on the box can drive a headless browser (navigate/click/
+#  snapshot, console + network) and do deeper debugging (performance traces / Web
+#  Vitals, throttling) — e.g. to test your web app. This is NOT
 #  "Claude in Chrome" (that extension is client-side, on your laptop). For sites
 #  that block datacenter IPs / throw CAPTCHAs you'd add a stealth/proxy layer
 #  (Steel, Browserbase) on top. Set to false to skip Chrome + Playwright.

@@ -1,9 +1,9 @@
 ---
 # On by default (browser_automation: true; set false to skip). Server-side, headless
-# browser use for the agent: install Google Chrome and wire Playwright MCP into each
-# profile. Playwright
-# drives the system Chrome headless — the 2026 standard for agent browser automation
-# (accessibility-tree, token-cheap). This is NOT "Claude in Chrome" (that extension
+# browser use for the agent: install Google Chrome and wire two MCP servers into each
+# profile — Playwright (drive the browser: navigate/click/snapshot, console + network)
+# and Chrome DevTools (deeper debugging: performance traces / Web Vitals, throttling).
+# Both run the system Chrome headless. This is NOT "Claude in Chrome" (that extension
 # is client-side, on your laptop).
 
 - name: Install supporting fonts for headless Chrome rendering
@@ -42,10 +42,14 @@
         path: /tmp/google-chrome-stable_current_amd64.deb
         state: absent
 
-- name: Wire Playwright MCP into each profile (user scope ~/.claude.json)
-  # Idempotent: sets only the "playwright" mcpServers entry, preserving any others
-  # (e.g. agentmemory). The MCP launches via npx at runtime; node/npx resolve through
-  # mise shims for both the Remote Control service and interactive sessions.
+- name: Wire browser MCP servers into each profile (user scope ~/.claude.json)
+  # Idempotent: sets only the "playwright" + "chrome-devtools" mcpServers entries,
+  # preserving any others (e.g. agentmemory). Both launch via npx at runtime; node/npx
+  # resolve through mise shims for the Remote Control service and interactive sessions.
+  #   playwright       — drive the headless system Chrome (navigate/click/snapshot,
+  #                      console + network inspection). The default for automation.
+  #   chrome-devtools  — deeper CDP debugging: performance traces / Web Vitals,
+  #                      network bodies+timing, CPU/network throttling.
   ansible.builtin.command:
     cmd: >-
       python3 -c 'import json,os;
@@ -53,6 +57,7 @@
       d=json.load(open(p)) if os.path.exists(p) else {};
       m=d.setdefault("mcpServers",{});
       m["playwright"]={"command":"npx","args":["-y","@playwright/mcp@latest","--browser","chrome","--headless","--no-sandbox"]};
+      m["chrome-devtools"]={"command":"npx","args":["-y","chrome-devtools-mcp@latest","--headless","--isolated","--channel","stable","--chrome-arg=--no-sandbox","--chrome-arg=--disable-setuid-sandbox","--no-usage-statistics"]};
       json.dump(d,open(p,"w"),indent=2)'
   become_user: "{{ item.user }}"
   environment:
