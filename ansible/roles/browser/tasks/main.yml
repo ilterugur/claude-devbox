@@ -1,0 +1,62 @@
+---
+# Opt-in (browser_automation: true). Server-side, headless browser use for the
+# agent: install Google Chrome and wire Playwright MCP into each profile. Playwright
+# drives the system Chrome headless — the 2026 standard for agent browser automation
+# (accessibility-tree, token-cheap). This is NOT "Claude in Chrome" (that extension
+# is client-side, on your laptop).
+
+- name: Install supporting fonts for headless Chrome rendering
+  ansible.builtin.apt:
+    name:
+      - fonts-liberation
+      - fonts-noto-core
+      - fonts-noto-color-emoji
+      - dbus-x11
+    state: present
+    update_cache: true
+
+- name: Check whether Google Chrome is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/google-chrome-stable
+  register: _chrome_bin
+
+# Install from the official .deb so Chrome self-manages its own apt repo/key — we
+# never add a repo ourselves (doing so collides with Chrome's own google-chrome.sources).
+- name: Install Google Chrome from the official .deb (pulls deps + its own repo)
+  when: not _chrome_bin.stat.exists
+  block:
+    - name: Download the current Google Chrome .deb
+      ansible.builtin.get_url:
+        url: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        dest: /tmp/google-chrome-stable_current_amd64.deb
+        mode: "0644"
+
+    - name: Install the Google Chrome .deb
+      ansible.builtin.apt:
+        deb: /tmp/google-chrome-stable_current_amd64.deb
+        state: present
+
+    - name: Remove the downloaded .deb
+      ansible.builtin.file:
+        path: /tmp/google-chrome-stable_current_amd64.deb
+        state: absent
+
+- name: Wire Playwright MCP into each profile (user scope ~/.claude.json)
+  # Idempotent: sets only the "playwright" mcpServers entry, preserving any others
+  # (e.g. agentmemory). The MCP launches via npx at runtime; node/npx resolve through
+  # mise shims for both the Remote Control service and interactive sessions.
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c 'import json,os;
+      p=os.path.expanduser("~/.claude.json");
+      d=json.load(open(p)) if os.path.exists(p) else {};
+      m=d.setdefault("mcpServers",{});
+      m["playwright"]={"command":"npx","args":["-y","@playwright/mcp@latest","--browser","chrome","--headless","--no-sandbox"]};
+      json.dump(d,open(p,"w"),indent=2)'
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  changed_when: false
