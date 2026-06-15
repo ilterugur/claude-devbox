@@ -22,9 +22,11 @@ backs up each file first. Zed is skipped unless Zed is installed or --zed is giv
        [--default PROFILE] [--launch CMD] [--locale L] [--no-zed|--zed]
        [--no-shell|--shell-rc PATH]
 
-The generated `<prefix>` command supports: `<prefix>` (default profile), `<prefix>
-<profile> [session]`, `<prefix> ls [profile]` (list open tmux sessions), and — when
---launch is set — `<prefix> -s [profile]` (plain shell, skip the auto-launched command).
+The generated `<prefix>` command supports: `<prefix>` (default profile, HOME),
+`<prefix> <project>` / `<prefix> <profile> <project>` (open in ~/projects/<project>),
+`<prefix> ls [profile]` (list open tmux sessions), and — when --launch is set —
+`<prefix> -s [...]` (plain shell, skip the auto-launched command). The tmux session is
+named after the project, so each project keeps its own re-attachable session.
 """
 import argparse
 import json
@@ -145,22 +147,22 @@ def shell_block(profiles, prefix, default, locale, launch):
     # macOS region locale (e.g. en_TR.UTF-8, or a bare LC_CTYPE=UTF-8) that Linux can't
     # provide makes mosh-server fail to start or bash warn. LC_CTYPE must be pinned too.
     loc = f"LANG={locale} LC_ALL={locale} LC_CTYPE={locale}"
-    bad = f'printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1'
-    chk = f'case " {users} " in *" $prof "*) ;; *) {bad} ;; esac'
     out = [
         BEGIN,
-        f"# `{prefix} [profile] [session]` — connect to a profile over mosh (falls back to ssh)",
-        "# into a persistent tmux session, so a dropped connection never loses work.",
-        f"#   {prefix}                  default profile '{default}', session 'main'",
-        f"#   {prefix} <profile> [sess] a specific profile / named tmux session",
-        f"#   {prefix} ls [profile]     list that profile's open (attachable) tmux sessions",
+        f"# `{prefix} [profile] [project]` — mosh+tmux (falls back to ssh) into a persistent",
+        "# session, so a dropped connection never loses work. tmux session = the project",
+        "# name (so each project keeps its own attachable session).",
+        f"#   {prefix}                       default profile '{default}', in HOME (no project)",
+        f"#   {prefix} <project>             default profile, in ~/projects/<project>",
+        f"#   {prefix} <profile> <project>   a specific profile + project",
+        f"#   {prefix} ls [profile]          list that profile's open (attachable) sessions",
     ]
     if launch:
         out += [
-            f"#   {prefix} -s [profile]    open a plain shell (skip the auto-`{launch}`)",
-            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); `exec $SHELL` keeps",
-            "# the session alive after it exits. mosh needs this client on the box's Tailscale",
-            "# net (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius provide it.",
+            f"#   {prefix} -s [profile] [project]  open a plain shell (skip the auto-`{launch}`)",
+            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); `exec bash` keeps the",
+            "# session alive after it exits. mosh needs this client on the box's Tailscale net",
+            "# (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius provide it.",
         ]
     else:
         out += [
@@ -169,36 +171,41 @@ def shell_block(profiles, prefix, default, locale, launch):
         ]
     out += [
         f"{prefix}() {{",
-        f'  local prof sess h nolaunch=',
+        f"  local prof proj sess dir h nolaunch=",
         f'  if [ "$1" = ls ] || [ "$1" = -l ] || [ "$1" = --list ]; then',
-        f'    prof="${{2:-{default}}}"; {chk}',
+        f'    prof="${{2:-{default}}}"',
         f'''    {loc} ssh "{prefix}-$prof" "tmux ls 2>/dev/null || echo '(no open sessions)'"; return''',
         f'  fi',
     ]
     if launch:
         out += [f'  case "$1" in -s|--shell) nolaunch=1; shift ;; esac']
     out += [
-        f'  prof="${{1:-{default}}}" sess="${{2:-main}}"; {chk}',
+        f'  prof="{default}"; proj=',
+        f'  case "$1" in',
+        f'    "") ;;',
+        f'    *) case " {users} " in *" $1 "*) prof="$1"; proj="$2" ;; *) proj="$1" ;; esac ;;',
+        f'  esac',
+        f'  if [ -n "$proj" ]; then sess="$proj"; dir="/home/$prof/projects/$proj"; else sess=main; dir="/home/$prof"; fi',
         f'  h="{prefix}-$prof"',
     ]
     if launch:
         # Run <launch> via a LOGIN shell (bash -lc) so ~/.local/bin + mise are on PATH —
         # tmux runs its command through a bare `sh -c`, where `claude` wouldn't be found.
-        # `exec bash` after keeps the session alive (inheriting the login PATH).
+        # tmux's -c sets the start dir; `exec bash` keeps the session alive after it exits.
         run = f"bash -lc '{launch}; exec bash'"
         out += [
             f'  if command -v mosh >/dev/null 2>&1; then',
-            f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess"',
-            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" "{run}"; fi''',
+            f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
+            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir" "{run}"; fi''',
             f'  else',
-            f'    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s $sess"',
-            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess \\"{run}\\""; fi''',
+            f'    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir"',
+            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir \\"{run}\\""; fi''',
             f'  fi',
         ]
     else:
         out += [
-            f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- tmux new -A -s "$sess"',
-            f'  else {loc} ssh -t "$h" "tmux new -A -s $sess"; fi',
+            f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
+            f'  else {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir"; fi',
         ]
     out += ["}", END]
     return "\n".join(out) + "\n"
