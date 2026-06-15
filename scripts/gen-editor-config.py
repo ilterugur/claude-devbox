@@ -22,10 +22,14 @@ backs up each file first. Zed is skipped unless Zed is installed or --zed is giv
        [--default PROFILE] [--launch CMD] [--locale L] [--no-zed|--zed]
        [--no-shell|--shell-rc PATH]
 
-The generated `<prefix>` command uses a remembered ACTIVE profile:
-  <prefix>                    active profile, in HOME
+The generated `<prefix>` command uses a remembered ACTIVE profile. Bare `<prefix>`
+opens an interactive picker (fuzzy if `fzf` is installed, else a numbered menu) of
+HOME / new project / the profile's projects — UNLESS run inside a local git repo whose
+origin matches a box project, which it opens directly (`-m` forces the picker):
+  <prefix>                    pick — or git-auto-open — for the active profile
   <prefix> <project>          active profile, in ~/projects/<project>
   <prefix> -p <profile> [proj] override the profile for one call
+  <prefix> -m                 force the picker (skip git auto-open)
   <prefix> use [<profile>]    show, or set, the remembered active profile
   <prefix> ls [profile]       list open tmux sessions
   <prefix> -s [project]       plain shell (skip the --launch command), when --launch is set
