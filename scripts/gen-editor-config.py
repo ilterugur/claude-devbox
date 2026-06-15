@@ -134,24 +134,36 @@ def write_zed(entries, prefix, forced):
     print(f"  ✓ ~/.config/zed/settings.json updated (backup alongside if it existed)")
 
 
-def shell_block(profiles, prefix, default, locale):
+def shell_block(profiles, prefix, default, locale, launch):
     users = " ".join(p["user"] for p in profiles)
+    # Pin LANG/LC_ALL/LC_CTYPE: mosh hands the client's locale to mosh-server, and a
+    # macOS region locale (e.g. en_TR.UTF-8, or a bare LC_CTYPE=UTF-8) that Linux can't
+    # provide makes mosh-server fail to start or bash warn. LC_CTYPE must be pinned too.
+    loc = f"LANG={locale} LC_ALL={locale} LC_CTYPE={locale}"
+    if launch:
+        # Run <launch> on session create; `exec $SHELL` keeps the session alive (and
+        # re-attachable) after it exits. On re-attach tmux ignores the command.
+        m_cmd = f"tmux new -A -s \"$sess\" '{launch}; exec $SHELL'"
+        s_cmd = f"tmux new -A -s $sess '{launch}; exec \\$SHELL'"
+        launchnote = f" Auto-runs `{launch}` on a fresh session (re-attach resumes it)."
+    else:
+        m_cmd = 'tmux new -A -s "$sess"'
+        s_cmd = "tmux new -A -s $sess"
+        launchnote = " Run `claude` yourself once attached."
     out = [
         BEGIN,
         f"# `{prefix} [profile] [session]` — connect to a profile over mosh (falls back to",
         "# ssh) into a persistent tmux session, so a dropped connection never loses work.",
-        f"# No profile => default '{default}'; no session => 'main'. mosh needs this client",
-        "# on the box's Tailscale net (mosh UDP is tailscale-only); `brew install mosh` /",
-        "# Blink / Termius provide the client. Run `claude` yourself once attached.",
-        f"# LC_ALL is pinned to {locale}: mosh hands the client's locale to mosh-server, and",
-        "# a region locale like en_TR.UTF-8 (macOS) that Linux can't provide makes it fail.",
+        f"# No profile => default '{default}'; no session => 'main'.{launchnote}",
+        "# mosh needs this client on the box's Tailscale net (mosh UDP is tailscale-only);",
+        "# `brew install mosh` / Blink / Termius provide the client.",
         f"{prefix}() {{",
         f'  local prof="${{1:-{default}}}" sess="${{2:-main}}" h',
         f'  case " {users} " in *" $prof "*) ;; *)',
         f'    printf "{prefix}: unknown profile \'%s\' (have: {users})\\n" "$prof" >&2; return 1 ;; esac',
         f'  h="{prefix}-$prof"',
-        f'  if command -v mosh >/dev/null 2>&1; then LC_ALL={locale} mosh "$h" -- tmux new -A -s "$sess"',
-        f'  else LC_ALL={locale} ssh -t "$h" "tmux new -A -s $sess"; fi',
+        f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- {m_cmd}',
+        f'  else {loc} ssh -t "$h" "{s_cmd}"; fi',
         "}",
         END,
     ]
@@ -196,7 +208,8 @@ def main():
     ap.add_argument("--default", help="default profile for the bare `<prefix>` command (else the first)")
     ap.add_argument("--shell-rc", help="shell rc file to write the connect function into (else autodetect)")
     ap.add_argument("--no-shell", action="store_true", help="don't add the shell connect function")
-    ap.add_argument("--locale", default="en_US.UTF-8", help="locale the connect command pins (LC_ALL) so mosh-server starts (default en_US.UTF-8)")
+    ap.add_argument("--locale", default="en_US.UTF-8", help="locale the connect command pins (LANG/LC_ALL/LC_CTYPE) so mosh-server starts (default en_US.UTF-8)")
+    ap.add_argument("--launch", default="", help="command to auto-run on a fresh session, e.g. 'claude' (default: none — lands in a shell)")
     args = ap.parse_args()
 
     repo = find_repo(args.repo)
@@ -216,7 +229,7 @@ def main():
     if not args.no_zed:
         write_zed(zed_entries(profiles, args.prefix), args.prefix, args.zed)
     if not args.no_shell:
-        write_shell_rc(shell_block(profiles, args.prefix, default, args.locale), shell_rc_path(args.shell_rc))
+        write_shell_rc(shell_block(profiles, args.prefix, default, args.locale, args.launch), shell_rc_path(args.shell_rc))
 
     aliases = ", ".join(f"{args.prefix}-{p['user']}" for p in profiles)
     print(f"\nDone.")

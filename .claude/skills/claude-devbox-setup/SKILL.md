@@ -159,7 +159,9 @@ These can't be fully automated; walk the user through them:
   a one-word **`devbox`** shell command (`devbox` = default profile, `devbox <profile>
   [session]` otherwise) that connects over mosh+tmux for a drop-proof terminal — pass
   `--host <tailscale-name>` so mosh resolves over Tailscale (its UDP is tailscale-only),
-  and `--default <profile>` to set the bare-`devbox` target. Re-running is safe:
+  `--default <profile>` to set the bare-`devbox` target, and `--launch claude` to auto-start
+  Claude on a fresh session (the command pins LANG/LC_ALL/LC_CTYPE so a macOS region locale
+  like en_TR.UTF-8 doesn't break mosh-server). Re-running is safe:
   existing blocks are updated in place, not duplicated.
 - Point the user to daily use: connect the **desktop app / VS Code Remote-SSH /
   Zed as a profile** (e.g. `devbox-work`), drive from the **mobile app** per
