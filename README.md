@@ -127,9 +127,14 @@ switch to that profile's account → your server → new session.
   Auto port-forwarding for previews. See [docs/realtime-sync.md](docs/realtime-sync.md).
 - **Phone — Claude mobile app:** Code tab → switch to the profile's account → its
   server → new session, runs on the box. See [docs/mobile.md](docs/mobile.md).
+- **Flaky connection (mobile, switching networks) — mosh + tmux:** `mosh <user>@<box> -- tmux
+  new -A -s main` then run `claude` inside. Survives network drops / IP changes and
+  resumes on reconnect — the resilient alternative to Claude Desktop's integrated
+  SSH (which drops the session on disconnect). On by default (`mosh_enabled`); see
+  [docs/mobile.md](docs/mobile.md).
 - **Dev servers / preview:** `sudo claude-devbox-dev <user> <project>` on the box,
   then Tailscale Serve or VS Code forward.
-- **`scripts/connect.sh`** runs locally and wraps the common ssh/attach/login/serve
+- **`scripts/connect.sh`** runs locally and wraps the common ssh/attach/mosh/login/serve
   calls — `export DEVBOX_HOST=admin@<box>` first.
 
 ## Isolation & runtimes
@@ -150,8 +155,8 @@ ansible/
   inventory.example.ini   group_vars/all.example.yml   playbook.yml
   requirements.yml        ansible.cfg
   roles/
-    base  security  tailscale  docker  runtime(mise)  users  projects
-    claude_remote  claude_config
+    base  security  tailscale  mosh  docker  runtime(mise)  users  projects
+    claude_remote  claude_config  browser
 claude-config/   README.md  settings.shared.example.json  shared/ (gitignored)
 scripts/
   claude-devbox-login.sh  claude-config-apply.sh  claude-devbox-dev.sh
@@ -164,6 +169,7 @@ docs/
 
 ## Docs
 
+- [Connecting to the box (Remote Control · mosh+tmux · Desktop SSH · Remote-SSH)](docs/connecting.md)
 - [Multiple accounts / profiles (+ Anthropic ToS)](docs/multi-account.md)
 - [Multiple projects + per-profile git](docs/multi-project.md)
 - [Runtimes (mise) & isolation](docs/runtimes.md)
