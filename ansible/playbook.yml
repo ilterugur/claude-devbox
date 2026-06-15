@@ -53,6 +53,10 @@
     - { role: base, tags: [base] }
     - { role: security, tags: [security] }
     - { role: tailscale, tags: [tailscale] }
+    # ON BY DEFAULT (set mosh_enabled: false to skip): mosh for roaming-resilient
+    # terminal sessions (survives network drops; pair with tmux). After tailscale so
+    # its UFW rule can scope to the tailscale0 interface.
+    - { role: mosh, tags: [mosh], when: "mosh_enabled | default(true)" }
     - { role: docker, tags: [docker] }
     - { role: runtime, tags: [runtime, mise] }
     - { role: users, tags: [users, profiles] }

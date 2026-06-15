@@ -1,0 +1,25 @@
+---
+# On by default (mosh_enabled: true; set false to skip). mosh + tmux gives a
+# roaming-resilient terminal: mosh survives network drops and IP changes (mobile,
+# phone switching cells/Wi-Fi), while tmux keeps the session — and the `claude`
+# running in it — alive on the box across reconnects. This is the resilient
+# alternative to Claude Desktop's integrated SSH remote, which drops the session
+# on disconnect with no resume (anthropics/claude-code#49790). tmux is already
+# installed (the Remote Control service uses it).
+
+- name: Install mosh
+  ansible.builtin.apt:
+    name: mosh
+    state: present
+    update_cache: true
+
+- name: Allow mosh (UDP 60000-61000) over Tailscale
+  # Scoped to the tailscale0 interface so the UDP range is reachable only from your
+  # tailnet, never the public internet — connect to the box's Tailscale address.
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: tailscale0
+    proto: udp
+    port: "60000:61000"
+    comment: mosh over tailscale

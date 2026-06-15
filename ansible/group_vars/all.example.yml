@@ -81,6 +81,14 @@ claude_sync_settings: false # settings.json/hooks are machine-coupled; opt in
 #  (Steel, Browserbase) on top. Set to false to skip Chrome + Playwright.
 browser_automation: true
 
+# ── Roaming-resilient terminal: mosh (+ tmux) (ON by default) ─────────────────
+#  Installs mosh and opens its UDP range on the tailscale0 interface only. mosh
+#  survives network drops / IP changes (mobile, switching networks) and tmux keeps `claude`
+#  alive on the box across reconnects — the resilient alternative to Claude
+#  Desktop's integrated SSH remote (which drops the session on disconnect). Connect
+#  with: mosh <user>@<tailscale-name> -- tmux new -A -s main  (then run `claude`).
+mosh_enabled: true
+
 # ── Optional cleanup (all OFF by default) ─────────────────────────────────────
 # Remove superseded mise tool versions after a runtime bump (frees disk):
 mise_prune: false

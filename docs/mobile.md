@@ -52,7 +52,37 @@ That's it — the servers come online within ~15s of login.
   running and you reconnect.
 - Approving tool calls from a phone is easy — don't rubber-stamp risky ones.
 
+## Roaming-resilient terminal: mosh + tmux (flaky connections)
+
+Remote Control is the easiest mobile path, but if you'd rather drive the real
+`claude` TUI from a terminal on a flaky connection (switching cells/Wi‑Fi),
+use **mosh + tmux** instead. mosh survives network drops and IP changes (auto‑reconnects
+where plain SSH would die); tmux keeps the session — and the `claude` inside it —
+alive on the box so a reconnect lands exactly where you left off.
+
+Installed by default (`mosh_enabled`); the box opens mosh's UDP range **only on the
+tailscale0 interface**, so connect over Tailscale:
+
+```bash
+# phone: Blink or Termius (both speak mosh) + the Tailscale app, OR laptop terminal
+mosh <user>@<tailscale-name-or-100.x> -- tmux new -A -s main
+#   inside the session:
+claude            # drop signal / close the lid → reconnect resumes the same session
+```
+
+From the laptop you can also just run `scripts/connect.sh mosh <user>` (needs
+`brew install mosh` locally).
+
+> **Why not Claude Desktop's integrated SSH for this?** Its remote‑project SSH mode
+> drops the Claude Code session on disconnect with no resume, and times out after
+> ~10 min of network loss (open feature request: anthropics/claude-code#49790). It
+> can't be wrapped in mosh/tmux — the app drives `claude`'s stdio directly. For
+> flaky connections use **Remote Control** or **mosh + tmux**; keep the Desktop
+> integrated SSH for stable, at‑the‑desk work. (Your conversation is still persisted
+> on the box either way — `claude --continue` resumes it after any drop.)
+
 ## References
 
 - [Remote Control](https://code.claude.com/docs/en/remote-control)
 - [Claude Code on the web (runs on Anthropic cloud)](https://code.claude.com/docs/en/claude-code-on-the-web)
+- [Desktop SSH session persistence — feature request #49790](https://github.com/anthropics/claude-code/issues/49790)

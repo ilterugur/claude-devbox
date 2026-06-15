@@ -7,6 +7,11 @@
 #   connect.sh status                   # remote-control services + states
 #   connect.sh login [users...]         # one-time /login per profile
 #   connect.sh attach <user> <project>  # attach that profile's claude-rc session
+#   connect.sh mosh <user> [session]    # roaming-resilient terminal AS a profile,
+#                                       #   into a persistent tmux session (run `claude`
+#                                       #   inside). Survives network drops; reconnect
+#                                       #   resumes. Needs mosh on this laptop + on the
+#                                       #   box (mosh_enabled), and Tailscale up.
 #   connect.sh devup <user> <project> [cmd]   # start a project's dev server
 #   connect.sh serve <port>             # tailscale-serve a dev port for preview
 set -euo pipefail
@@ -23,9 +28,12 @@ case "${cmd}" in
   login)  exec ssh -t "${HOST}" "sudo claude-devbox-login $*" ;;
   attach) u="${1:?usage: connect.sh attach <user> <project>}"; p="${2:?project required}"
           exec ssh -t "${HOST}" "sudo -u ${u} tmux -L claude-rc-${u}-${p} attach -t claude-rc-${u}-${p}" ;;
+  mosh)   u="${1:?usage: connect.sh mosh <user> [session]}"; sess="${2:-main}"
+          command -v mosh >/dev/null || { echo "mosh not installed on this laptop (brew install mosh)" >&2; exit 1; }
+          exec mosh "${u}@${HOST#*@}" -- tmux new -A -s "${sess}" ;;
   devup)  u="${1:?usage: connect.sh devup <user> <project> [cmd]}"; p="${2:?project required}"; shift 2 || true
           exec ssh -t "${HOST}" "sudo claude-devbox-dev ${u} ${p} $*" ;;
   serve)  port="${1:?usage: connect.sh serve <port>}"
           exec ssh -t "${HOST}" "tailscale serve ${port}" ;;
-  *) echo "unknown command: ${cmd}  (ssh|status|login|attach|devup|serve)" >&2; exit 1 ;;
+  *) echo "unknown command: ${cmd}  (ssh|status|login|attach|mosh|devup|serve)" >&2; exit 1 ;;
 esac
