@@ -147,44 +147,63 @@ def shell_block(profiles, prefix, default, locale, launch):
     # macOS region locale (e.g. en_TR.UTF-8, or a bare LC_CTYPE=UTF-8) that Linux can't
     # provide makes mosh-server fail to start or bash warn. LC_CTYPE must be pinned too.
     loc = f"LANG={locale} LC_ALL={locale} LC_CTYPE={locale}"
+    badp = f'printf "{prefix}: unknown profile \'%s\' (have: {users})\\n"'
+    # resolve the active profile: override ($povr) > state file > baked default
+    resolve = (f'prof="$povr"; [ -n "$prof" ] || prof="$(cat "$STATE" 2>/dev/null)"; '
+               f'[ -n "$prof" ] || prof="{default}"')
     out = [
         BEGIN,
-        f"# `{prefix} [profile] [project]` — mosh+tmux (falls back to ssh) into a persistent",
-        "# session, so a dropped connection never loses work. tmux session = the project",
-        "# name (so each project keeps its own attachable session).",
-        f"#   {prefix}                       default profile '{default}', in HOME (no project)",
-        f"#   {prefix} <project>             default profile, in ~/projects/<project>",
-        f"#   {prefix} <profile> <project>   a specific profile + project",
-        f"#   {prefix} ls [profile]          list that profile's open (attachable) sessions",
+        f"# `{prefix} [project]` — mosh+tmux (falls back to ssh) into a persistent session for",
+        "# the ACTIVE profile, so a dropped connection never loses work. The active profile is",
+        f"# selected once and remembered; pass `-p <profile>` to override a single call.",
+        f"#   {prefix}                   active profile, in HOME (no project)",
+        f"#   {prefix} <project>         active profile, in ~/projects/<project>",
+        f"#   {prefix} -p <profile> [project]   use <profile> for this call only",
+        f"#   {prefix} use [<profile>]   show, or set, the remembered active profile",
+        f"#   {prefix} ls [profile]      list open (attachable) tmux sessions",
     ]
     if launch:
         out += [
-            f"#   {prefix} -s [profile] [project]  open a plain shell (skip the auto-`{launch}`)",
-            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); `exec bash` keeps the",
-            "# session alive after it exits. mosh needs this client on the box's Tailscale net",
-            "# (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius provide it.",
+            f"#   {prefix} -s [project]      open a plain shell (skip the auto-`{launch}`)",
+            f"# A fresh session auto-runs `{launch}` (re-attach resumes it); the tmux session is",
+            "# named after the project. mosh needs this client on the box's Tailscale net (mosh",
+            "# UDP is tailscale-only); `brew install mosh` / Blink / Termius provide the client.",
         ]
     else:
         out += [
-            "# mosh needs this client on the box's Tailscale net (mosh UDP is tailscale-only);",
-            "# `brew install mosh` / Blink / Termius provide the client. Run `claude` once attached.",
+            "# The tmux session is named after the project. mosh needs this client on the box's",
+            "# Tailscale net (mosh UDP is tailscale-only); `brew install mosh` / Blink / Termius.",
         ]
     out += [
         f"{prefix}() {{",
-        f"  local prof proj sess dir h nolaunch=",
-        f'  if [ "$1" = ls ] || [ "$1" = -l ] || [ "$1" = --list ]; then',
-        f'    prof="${{2:-{default}}}"',
+        f'  local STATE="$HOME/.config/claude-devbox/active-profile"',
+        f"  local prof proj sess dir h nolaunch= povr=",
+        # use [<profile>] — show or persist the active profile
+        f'  if [ "${{1:-}}" = use ] || [ "${{1:-}}" = profile ]; then',
+        f'    if [ -z "${{2:-}}" ]; then prof="$(cat "$STATE" 2>/dev/null)"; echo "active profile: ${{prof:-{default}}}"; return; fi',
+        f'    case " {users} " in *" $2 "*) ;; *) {badp} "$2" >&2; return 1 ;; esac',
+        f'    mkdir -p "${{STATE%/*}}" && printf "%s\\n" "$2" > "$STATE" && echo "active profile -> $2"; return',
+        f'  fi',
+        # ls [<profile>] — list sessions for the given/active profile
+        f'  if [ "${{1:-}}" = ls ] || [ "${{1:-}}" = -l ] || [ "${{1:-}}" = --list ]; then',
+        f'    povr="${{2:-}}"; {resolve}',
+        f'    case " {users} " in *" $prof "*) ;; *) {badp} "$prof" >&2; return 1 ;; esac',
         f'''    {loc} ssh "{prefix}-$prof" "tmux ls 2>/dev/null || echo '(no open sessions)'"; return''',
         f'  fi',
+        # flags: -p <profile> (one-call override)' + (-s) ; then positional <project>
+        f'  while [ $# -gt 0 ]; do case "$1" in',
+        f'    -p|--profile) povr="$2"; shift; [ $# -gt 0 ] && shift ;;',
     ]
     if launch:
-        out += [f'  case "$1" in -s|--shell) nolaunch=1; shift ;; esac']
+        out += [f'    -s|--shell) nolaunch=1; shift ;;']
     out += [
-        f'  prof="{default}"; proj=',
-        f'  case "$1" in',
-        f'    "") ;;',
-        f'    *) case " {users} " in *" $1 "*) prof="$1"; proj="$2" ;; *) proj="$1" ;; esac ;;',
-        f'  esac',
+        f'    --) shift; break ;;',
+        f'    -?*) printf "{prefix}: unknown option %s\\n" "$1" >&2; return 1 ;;',
+        f'    *) break ;;',
+        f'  esac; done',
+        f'  {resolve}',
+        f'  case " {users} " in *" $prof "*) ;; *) {badp} "$prof" >&2; return 1 ;; esac',
+        f'  proj="${{1:-}}"',
         f'  if [ -n "$proj" ]; then sess="$proj"; dir="/home/$prof/projects/$proj"; else sess=main; dir="/home/$prof"; fi',
         f'  h="{prefix}-$prof"',
     ]
@@ -198,14 +217,14 @@ def shell_block(profiles, prefix, default, locale, launch):
             f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
             f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir" "{run}"; fi''',
             f'  else',
-            f'    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir"',
-            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir \\"{run}\\""; fi''',
+            f'''    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir'"''',
+            f'''    else {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir' \\"{run}\\""; fi''',
             f'  fi',
         ]
     else:
         out += [
             f'  if command -v mosh >/dev/null 2>&1; then {loc} mosh "$h" -- tmux new -A -s "$sess" -c "$dir"',
-            f'  else {loc} ssh -t "$h" "tmux new -A -s $sess -c $dir"; fi',
+            f'''  else {loc} ssh -t "$h" "tmux new -A -s '$sess' -c '$dir'"; fi''',
         ]
     out += ["}", END]
     return "\n".join(out) + "\n"
