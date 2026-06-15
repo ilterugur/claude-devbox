@@ -40,7 +40,9 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 
 BEGIN = "# >>> claude-devbox (managed) >>>"
@@ -334,6 +336,71 @@ def write_shell_rc(block, path):
     print(f"  ✓ {short} updated (backup: {short}.bak) — open a new terminal or `source {short}`")
 
 
+def strip_managed_block(path):
+    """Remove our managed block from a file (used to drop the shell function when the
+    Bun CLI is installed, so the CLI on PATH isn't shadowed by a shell function)."""
+    if not os.path.exists(path):
+        return
+    existing = open(path).read()
+    if BEGIN not in existing:
+        return
+    shutil.copy2(path, path + ".bak")
+    stripped = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", "", existing, flags=re.S)
+    with open(path, "w") as f:
+        f.write(re.sub(r"\n\n\n+", "\n\n", stripped))
+    short = path.replace(os.path.expanduser("~"), "~")
+    print(f"  ✓ removed the shell function from {short} (the CLI on PATH is now `{os.path.basename(path)}`'s devbox)")
+
+
+def write_cli_config(profiles, prefix, host, default, locale, launch):
+    """Write ~/.config/claude-devbox/config.json for the Bun CLI to read."""
+    cfg = {
+        "prefix": prefix,
+        "host": host,
+        "default": default,
+        "locale": locale,
+        "launch": launch,
+        "profiles": [
+            {"user": p["user"],
+             "projects": [{"name": pr["name"], "repo": pr.get("repo", "")} for pr in (p.get("projects") or [])]}
+            for p in profiles
+        ],
+    }
+    d = os.path.expanduser("~/.config/claude-devbox")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "config.json")
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+        f.write("\n")
+    print(f"  ✓ ~/.config/claude-devbox/config.json written ({len(profiles)} profile(s))")
+
+
+def install_cli(repo, prefix):
+    """Install the Bun TS CLI: `bun install` its deps and drop a wrapper on PATH that
+    runs the source via bun. Returns the wrapper path, or None if bun is missing."""
+    if not shutil.which("bun"):
+        print("  ! bun not found — install bun (https://bun.sh) then re-run with --cli, "
+              "or use the shell function instead (drop --cli).")
+        return None
+    cli_dir = os.path.join(repo, "clients", "devbox")
+    src = os.path.join(cli_dir, "src", "devbox.ts")
+    if not os.path.exists(src):
+        die(f"CLI source not found at {src}")
+    print("  · bun install (CLI deps)…")
+    subprocess.run(["bun", "install"], cwd=cli_dir, check=True, stdout=subprocess.DEVNULL)
+    bindir = os.path.expanduser("~/.local/bin")
+    os.makedirs(bindir, exist_ok=True)
+    wrapper = os.path.join(bindir, prefix)
+    with open(wrapper, "w") as f:
+        f.write(f'#!/bin/sh\n# Managed by claude-devbox (gen-editor-config.py --cli).\n'
+                f'exec bun {shlex.quote(src)} "$@"\n')
+    os.chmod(wrapper, 0o755)
+    print(f"  ✓ installed `{prefix}` -> ~/.local/bin/{prefix} (runs the Bun CLI)")
+    if bindir not in os.environ.get("PATH", "").split(os.pathsep):
+        print(f"  ! ~/.local/bin is not on your PATH — add: export PATH=\"$HOME/.local/bin:$PATH\"")
+    return wrapper
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo")
@@ -347,6 +414,7 @@ def main():
     ap.add_argument("--no-shell", action="store_true", help="don't add the shell connect function")
     ap.add_argument("--locale", default="en_US.UTF-8", help="locale the connect command pins (LANG/LC_ALL/LC_CTYPE) so mosh-server starts (default en_US.UTF-8)")
     ap.add_argument("--launch", default="", help="command to auto-run on a fresh session, e.g. 'claude' (default: none — lands in a shell)")
+    ap.add_argument("--cli", action="store_true", help="install the Bun TS CLI (fuzzy picker, no fzf) instead of the shell function")
     args = ap.parse_args()
 
     repo = find_repo(args.repo)
@@ -365,13 +433,24 @@ def main():
     write_ssh_config(ssh_block(profiles, host, key, args.prefix))
     if not args.no_zed:
         write_zed(zed_entries(profiles, args.prefix), args.prefix, args.zed)
-    if not args.no_shell:
+
+    if args.cli:
+        # Bun CLI mode: write its config, install it on PATH, and remove the shell
+        # function (a same-named shell function would shadow the CLI binary on PATH).
+        write_cli_config(profiles, args.prefix, host, default, args.locale, args.launch)
+        installed = install_cli(repo, args.prefix)
+        if installed:
+            strip_managed_block(shell_rc_path(args.shell_rc))
+    elif not args.no_shell:
         write_shell_rc(shell_block(profiles, args.prefix, default, args.locale, args.launch), shell_rc_path(args.shell_rc))
 
     aliases = ", ".join(f"{args.prefix}-{p['user']}" for p in profiles)
     print(f"\nDone.")
-    print(f"  • Terminal (mosh+tmux, drop-proof):  {args.prefix} [profile] [session]")
-    print(f"      e.g. `{args.prefix}` → {default} · `{args.prefix} {users[-1]}` → {users[-1]} · 2nd arg = tmux session")
+    if args.cli:
+        print(f"  • Terminal CLI (fuzzy picker, mosh+tmux):  {args.prefix} [project] · {args.prefix} use · {args.prefix} ls")
+        print(f"      bare `{args.prefix}` git-auto-opens a matching repo, else shows the picker")
+    else:
+        print(f"  • Terminal (mosh+tmux, drop-proof):  {args.prefix} [project] · {args.prefix} use · {args.prefix} ls")
     print(f"  • VS Code / Cursor: Remote-SSH → Connect to Host → {aliases}")
     print(f"  • Zed: command palette → 'projects: open remote'")
 
