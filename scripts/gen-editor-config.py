@@ -182,13 +182,17 @@ def shell_block(profiles, prefix, default, locale, launch):
         f'  h="{prefix}-$prof"',
     ]
     if launch:
+        # Run <launch> via a LOGIN shell (bash -lc) so ~/.local/bin + mise are on PATH —
+        # tmux runs its command through a bare `sh -c`, where `claude` wouldn't be found.
+        # `exec bash` after keeps the session alive (inheriting the login PATH).
+        run = f"bash -lc '{launch}; exec bash'"
         out += [
             f'  if command -v mosh >/dev/null 2>&1; then',
             f'    if [ -n "$nolaunch" ]; then {loc} mosh "$h" -- tmux new -A -s "$sess"',
-            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" '{launch}; exec $SHELL'; fi''',
+            f'''    else {loc} mosh "$h" -- tmux new -A -s "$sess" "{run}"; fi''',
             f'  else',
             f'    if [ -n "$nolaunch" ]; then {loc} ssh -t "$h" "tmux new -A -s $sess"',
-            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess '{launch}; exec \\$SHELL'"; fi''',
+            f'''    else {loc} ssh -t "$h" "tmux new -A -s $sess \\"{run}\\""; fi''',
             f'  fi',
         ]
     else:
