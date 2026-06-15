@@ -1,0 +1,77 @@
+---
+# Provision Syncthing for profiles that selected sync_engine: syncthing. Each gets
+# its own system-template instance (syncthing@<user>) so it starts at boot with no
+# login. The role is gated at the playbook level (when: any syncthing profile), so
+# it only runs when needed; the loops below iterate just the syncthing profiles.
+- name: Collect profiles using the syncthing engine
+  ansible.builtin.set_fact:
+    syncthing_profiles: "{{ profiles | selectattr('sync_engine', 'defined') | selectattr('sync_engine', 'equalto', 'syncthing') | list }}"
+
+- name: Install Syncthing
+  ansible.builtin.apt:
+    name: syncthing
+    state: present
+    update_cache: true
+
+- name: Raise inotify watch limit (Syncthing watches one descriptor per directory)
+  ansible.posix.sysctl:
+    name: fs.inotify.max_user_watches
+    value: "524288"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Get the box Tailscale IPv4 (for the Syncthing listen + peer pinning)
+  ansible.builtin.command: tailscale ip -4
+  register: _ts_ip
+  changed_when: false
+
+- name: Ensure each profile's Syncthing state dir
+  ansible.builtin.file:
+    path: "/home/{{ item.user }}/.local/state/syncthing"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0700"
+  loop: "{{ syncthing_profiles }}"
+  loop_control: { label: "{{ item.user }}" }
+
+- name: Generate a Syncthing device certificate/ID per profile (if absent)
+  ansible.builtin.command:
+    cmd: "syncthing generate --home /home/{{ item.user }}/.local/state/syncthing"
+    creates: "/home/{{ item.user }}/.local/state/syncthing/cert.pem"
+  become_user: "{{ item.user }}"
+  loop: "{{ syncthing_profiles }}"
+  loop_control: { label: "{{ item.user }}" }
+
+- name: Template the base config (discovery/relay/NAT off, apikey, ports, tailnet listen)
+  ansible.builtin.template:
+    src: config.xml.j2
+    dest: "/home/{{ item.0.user }}/.local/state/syncthing/config.xml"
+    owner: "{{ item.0.user }}"
+    group: "{{ item.0.user }}"
+    mode: "0600"
+  vars:
+    gui_port: "{{ 8384 + item.1 }}" # distinct GUI port per profile
+    api_key: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    ts_ip: "{{ _ts_ip.stdout | trim }}"
+  loop: "{{ syncthing_profiles | zip(range(0, syncthing_profiles | length)) | list }}"
+  loop_control: { label: "{{ item.0.user }}" }
+  notify: restart syncthing
+
+- name: Enable + start syncthing@<profile>
+  ansible.builtin.systemd:
+    name: "syncthing@{{ item.user }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ syncthing_profiles }}"
+  loop_control: { label: "{{ item.user }}" }
+
+- name: Allow Syncthing BEP (22000) only on the Tailscale interface
+  community.general.ufw:
+    rule: allow
+    port: "22000"
+    proto: tcp
+    interface: tailscale0
+    direction: in

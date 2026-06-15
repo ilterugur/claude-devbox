@@ -160,6 +160,15 @@ export const syncEngineFor = (cfg: Config, prof: string): EngineId => profileOf(
 export const syncDiskEnabled = (cfg: Config, prof: string): boolean => profileOf(cfg, prof)?.syncDisk ?? false;
 export const lazyMountOnConnect = (cfg: Config, prof: string): boolean => profileOf(cfg, prof)?.lazyMountOnConnect ?? false;
 
+/** The box's reachable hostname/IP behind the ssh alias (from `ssh -G <host>`), for
+ *  pinning Syncthing's peer address. Falls back to the alias itself. */
+export function sshHostName(host: string): string {
+  const r = spawnSync("ssh", ["-G", host], { encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout) return host;
+  const m = /^hostname\s+(\S+)/m.exec(r.stdout);
+  return m ? m[1] : host;
+}
+
 // ── session / transcript helpers ─────────────────────────────────────────────
 
 /** The Claude Code projects root: ~/.claude/projects. */

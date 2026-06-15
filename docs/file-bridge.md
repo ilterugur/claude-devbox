@@ -54,3 +54,16 @@ Drag folders into `~/devbox/<profile>/` like a normal disk. They appear on the b
 `/home/<profile>/sync/` and stay there when the laptop sleeps. Conflicts are surfaced by
 `devbox sync status` and resolved manually (no auto-merge). `.git`, `node_modules`, `dist`,
 `build`, `.next`, `target` are never synced. Keep git history on the box as your real undo.
+
+### Using Syncthing instead of Mutagen
+
+Set `sync_engine: syncthing` for the profile, re-run the playbook with `--tags syncthing`
+(provisions the per-profile box instance), install Syncthing on the laptop (`brew install
+syncthing` + `brew services start syncthing`), then `devbox sync up` as usual. The CLI pairs the
+two devices and shares the single folder over the REST API (laptop directly; box via an ephemeral
+`ssh -L` tunnel). Peers connect over Tailscale only — global/local discovery, relays, and NAT are
+disabled and the listener is pinned to the box's Tailscale IP.
+
+Conflicts: Syncthing writes `*.sync-conflict-*` files and keeps deleted/replaced copies under
+`.stversions` (Trash-Can versioning on both peers). `devbox sync status` shows folder state; use
+the Syncthing GUI for per-file conflict detail.

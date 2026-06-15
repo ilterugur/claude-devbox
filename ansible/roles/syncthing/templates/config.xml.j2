@@ -1,0 +1,19 @@
+{#- Managed by Ansible (claude-devbox). `syncthing generate` first creates cert.pem/key.pem
+    (the device identity); Syncthing re-adds its own <device> self-entry on start if missing.
+    This file sets only the GUI (localhost + apikey) and options (discovery/relay/NAT off,
+    listener pinned to the box's Tailscale IP). Verify against your Syncthing version. -#}
+<configuration version="37">
+    <gui enabled="true" tls="false">
+        <address>127.0.0.1:{{ gui_port }}</address>
+        <apikey>{{ api_key }}</apikey>
+    </gui>
+    <options>
+        <listenAddress>tcp://{{ ts_ip }}:22000</listenAddress>
+        <globalAnnounceEnabled>false</globalAnnounceEnabled>
+        <localAnnounceEnabled>false</localAnnounceEnabled>
+        <relaysEnabled>false</relaysEnabled>
+        <natEnabled>false</natEnabled>
+        <urAccepted>-1</urAccepted>
+        <crashReportingEnabled>false</crashReportingEnabled>
+    </options>
+</configuration>

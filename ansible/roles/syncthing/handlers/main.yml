@@ -1,0 +1,7 @@
+---
+- name: restart syncthing
+  ansible.builtin.systemd:
+    name: "syncthing@{{ item.user }}"
+    state: restarted
+  loop: "{{ syncthing_profiles }}"
+  loop_control: { label: "{{ item.user }}" }

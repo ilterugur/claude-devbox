@@ -5,6 +5,7 @@
  */
 import { die, type EngineId } from "../config";
 import { MutagenEngine } from "./mutagen";
+import { SyncthingEngine } from "./syncthing";
 
 export type SyncStatus = { name: string; state: string; conflicts: number };
 export type SyncUpOpts = { profile: string; host: string; localRoot: string; remoteRoot: string; ignores: string[] };
@@ -23,6 +24,6 @@ export const DEFAULT_IGNORES = ["node_modules", "dist", "build", ".next", "targe
 
 export function engineFor(id: EngineId): SyncEngine {
   if (id === "mutagen") return new MutagenEngine();
-  // Plan 3 adds: if (id === "syncthing") return new SyncthingEngine();
-  return die(`sync engine "${id}" is not available yet (install Plan 3 for Syncthing)`);
+  if (id === "syncthing") return new SyncthingEngine();
+  return die(`unknown sync engine "${id}"`);
 }
