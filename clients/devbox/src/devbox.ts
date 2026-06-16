@@ -27,6 +27,7 @@ import {
 } from "./config";
 import { pickUI } from "./picker";
 import { runPush } from "./push";
+import { runPull } from "./pull";
 import { runAdd } from "./add";
 import { runMountUp, runMountDown, runMountStatus } from "./mount";
 import { runSyncUp, runSyncDown, runSyncStatus, runSyncPause } from "./sync";
@@ -101,6 +102,35 @@ cli
       pick: !!opts.pick,
       profile: opts.profile as string | undefined,
       remoteCwd: opts.remoteCwd as string | undefined,
+      map: maps,
+      remapHome: !!opts.remapHome,
+      sidecar: opts.sidecar !== false,
+      go: !!opts.go,
+      yes: !!opts.yes,
+      force: !!opts.force,
+    });
+  });
+
+cli
+  .command("pull [project]", "copy a session FROM the box back to the client (mirror of push)")
+  .option("--session <id>", "box session id to pull (required unless --pick)")
+  .option("--pick", "fuzzy-pick a session from the box")
+  .option("-p, --profile <profile>", "source profile (default: active profile)")
+  .option("--local-cwd <dir>", "override the local target dir (default: $PWD)")
+  .option("--map <pair>", "extra path mapping OLD=NEW (repeatable)")
+  .option("--remap-home", "also remap /home/<profile> -> /Users/<you>")
+  .option("--no-sidecar", "do not pull the <id>/ sidecar dir")
+  .option("--go", "after pull, `claude --resume` locally")
+  .option("--yes", "skip the confirmation prompt")
+  .option("--force", "overwrite even if the local copy is live or newer")
+  .action(async (project: string | undefined, opts: Record<string, unknown>) => {
+    const maps = opts.map ? (Array.isArray(opts.map) ? (opts.map as string[]) : [opts.map as string]) : [];
+    await runPull(cfg, {
+      project,
+      session: opts.session as string | undefined,
+      pick: !!opts.pick,
+      profile: opts.profile as string | undefined,
+      localCwd: opts.localCwd as string | undefined,
       map: maps,
       remapHome: !!opts.remapHome,
       sidecar: opts.sidecar !== false,

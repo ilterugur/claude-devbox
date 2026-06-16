@@ -9,7 +9,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 export const CFG_DIR = join(homedir(), ".config", "claude-devbox");
 export const CONFIG_PATH = join(CFG_DIR, "config.json");
@@ -318,4 +318,120 @@ export function findSessionFile(id: string): { file: string; dir: string } | nul
     if (existsSync(file)) return { file, dir: join(root, d) };
   }
   return null;
+}
+
+/** True if a session id is currently live on this client (in the pid registry). */
+export function localLiveSession(id: string): boolean {
+  const dir = join(homedir(), ".claude", "sessions");
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return false;
+  }
+  for (const n of names) {
+    if (!n.endsWith(".json")) continue;
+    try {
+      const rec = JSON.parse(readFileSync(join(dir, n), "utf8"));
+      if (rec?.sessionId === id) return true;
+    } catch {
+      /* ignore unreadable/partial */
+    }
+  }
+  return false;
+}
+
+// ── box-side (remote) session discovery, for `devbox pull` ───────────────────
+
+export type RemoteSession = { id: string; mtime: number; boxRoot: string; firstPrompt: string; file: string };
+
+/**
+ * Pull the first genuine human prompt AND the session cwd out of a few transcript
+ * records (the remote enumeration greps only the first handful of "type":"user"
+ * lines, which carry both `cwd` and the message content). Skips SDK/meta/command
+ * injections the same way firstHumanPrompt does.
+ */
+function scanLines(lines: string[]): { firstPrompt: string; cwd: string | null } {
+  let firstPrompt = "";
+  let cwd: string | null = null;
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+    let rec: any;
+    try {
+      rec = JSON.parse(s);
+    } catch {
+      continue;
+    }
+    if (cwd === null && typeof rec.cwd === "string" && rec.cwd) cwd = rec.cwd;
+    if (!firstPrompt && rec.type === "user" && rec.isMeta !== true && rec.promptSource !== "sdk") {
+      const c = rec.message?.content;
+      let text = "";
+      if (typeof c === "string") text = c;
+      else if (Array.isArray(c)) text = c.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("");
+      text = text.trim();
+      if (text && !text.startsWith("<command-") && !text.startsWith("<system-reminder") && !text.startsWith("Caveat:"))
+        firstPrompt = text;
+    }
+    if (firstPrompt && cwd) break;
+  }
+  return { firstPrompt, cwd };
+}
+
+/** Run a read-only command on the box; die with a clear message if ssh fails. */
+function sshRead(host: string, remote: string, maxBuffer = 64 * 1024 * 1024): string {
+  const r = spawnSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, remote], { encoding: "utf8", maxBuffer });
+  if (r.status !== 0) die(`could not reach ${host}: ${(r.stderr || "").trim() || "ssh failed"}`);
+  return r.stdout ?? "";
+}
+
+// Parse the streamed "@@@<tab>mtime<tab>file" header lines + the grepped user
+// records that follow each, into RemoteSession records. Shared by list + by-id.
+function parseRemoteStream(stdout: string): RemoteSession[] {
+  const out: RemoteSession[] = [];
+  let cur: { mtime: number; file: string; lines: string[] } | null = null;
+  const flush = () => {
+    if (!cur) return;
+    const { firstPrompt, cwd } = scanLines(cur.lines);
+    out.push({
+      id: basename(cur.file).replace(/\.jsonl$/, ""),
+      mtime: cur.mtime * 1000,
+      boxRoot: cwd ?? "",
+      firstPrompt,
+      file: cur.file,
+    });
+    cur = null;
+  };
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith("@@@\t")) {
+      flush();
+      const [, mt = "", file = ""] = line.split("\t");
+      cur = { mtime: parseInt(mt, 10) || 0, file, lines: [] };
+    } else if (cur && line.trim()) {
+      cur.lines.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+// Remote shell that, for each matching jsonl, emits a header line then the first
+// few "type":"user" records (grep -m stops early, so it's fast even on big files).
+const enumScript = (glob: string) =>
+  `shopt -s nullglob; for f in ${glob}; do printf '@@@\\t%s\\t%s\\n' "$(stat -c %Y "$f" 2>/dev/null)" "$f"; ` +
+  `grep -a -m6 '"type":"user"' "$f" 2>/dev/null || true; done`;
+
+/** Enumerate every Claude session under /home/<profile>/.claude/projects, newest first. */
+export function listRemoteSessions(host: string, profile: string): RemoteSession[] {
+  const glob = `/home/${profile}/.claude/projects/*/*.jsonl`;
+  const sessions = parseRemoteStream(sshRead(host, enumScript(glob)));
+  sessions.sort((a, b) => b.mtime - a.mtime);
+  return sessions;
+}
+
+/** Locate a single box session by id (across the profile's project dirs). */
+export function getRemoteSession(host: string, profile: string, id: string): RemoteSession | null {
+  const glob = `/home/${profile}/.claude/projects/*/${id}.jsonl`;
+  const sessions = parseRemoteStream(sshRead(host, enumScript(glob)));
+  return sessions[0] ?? null;
 }

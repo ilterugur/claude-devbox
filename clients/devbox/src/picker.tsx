@@ -222,7 +222,15 @@ function relTime(ms: number): string {
 
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-function SessionPicker({ sessions, onDone }: { sessions: SessionPick[]; onDone: (s: SessionPick | null) => void }) {
+function SessionPicker({
+  sessions,
+  onDone,
+  title = "devbox push",
+}: {
+  sessions: SessionPick[];
+  onDone: (s: SessionPick | null) => void;
+  title?: string;
+}) {
   const [query, setQuery] = useState("");
   const [row, setRow] = useState(0);
   const filtered = query ? sessions.filter((s) => fuzzy(`${s.firstPrompt} ${s.id}`, query)) : sessions;
@@ -252,7 +260,7 @@ function SessionPicker({ sessions, onDone }: { sessions: SessionPick[]; onDone: 
         <Box flexDirection="column">
           <Text>
             <Text bold color={CLAY}>
-              devbox push
+              {title}
             </Text>
             <Text dimColor>{"  ·  pick a session"}</Text>
           </Text>
@@ -282,12 +290,13 @@ function SessionPicker({ sessions, onDone }: { sessions: SessionPick[]; onDone: 
 }
 
 /** Single-pane fuzzy picker over recent sessions. Resolves the chosen session, or null. */
-export function pickSessionUI(sessions: SessionPick[]): Promise<SessionPick | null> {
+export function pickSessionUI(sessions: SessionPick[], title?: string): Promise<SessionPick | null> {
   return new Promise((resolve) => {
     const app = render(
       <MouseProvider>
         <SessionPicker
           sessions={sessions}
+          title={title}
           onDone={(s) => {
             app.unmount();
             resolve(s);
