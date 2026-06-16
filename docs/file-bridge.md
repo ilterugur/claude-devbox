@@ -52,8 +52,11 @@ devbox sync down      # stop syncing (box copy stays on disk)
 
 Drag folders into `~/devbox/<profile>/` like a normal disk. They appear on the box at
 `/home/<profile>/sync/` and stay there when the client sleeps. Conflicts are surfaced by
-`devbox sync status` and resolved manually (no auto-merge). `.git`, `node_modules`, `dist`,
-`build`, `.next`, `target` are never synced. Keep git history on the box as your real undo.
+`devbox sync status` and resolved manually (no auto-merge). Never synced: VCS (`.git`), build/dep
+dirs (`node_modules`, `dist`, `build`, `.next`, `target`), and OS/editor cruft (`.DS_Store`, `._*`,
+`.Spotlight-V100`, `.Trashes`, `Thumbs.db`, `desktop.ini`, `*.swp`). Changing the ignore set means
+recreating the session (`devbox sync down && devbox sync up`). Keep git history on the box as your
+real undo.
 
 ### Using Syncthing instead of Mutagen
 

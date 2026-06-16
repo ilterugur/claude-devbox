@@ -19,8 +19,17 @@ export interface SyncEngine {
   resume(profile: string): Promise<void>;
 }
 
-/** VCS is handled separately (engine-specific); these are the heavy build/dep dirs. */
-export const DEFAULT_IGNORES = ["node_modules", "dist", "build", ".next", "target"];
+/**
+ * Patterns never synced. VCS is handled separately (engine-specific). Two groups:
+ * heavy build/dependency dirs, and OS/editor cruft (macOS/Windows/Vim droppings).
+ */
+export const DEFAULT_IGNORES = [
+  // build / dependency dirs
+  "node_modules", "dist", "build", ".next", "target",
+  // OS / editor cruft
+  ".DS_Store", "._*", ".Spotlight-V100", ".Trashes", ".fseventsd",
+  "Thumbs.db", "desktop.ini", "*.swp",
+];
 
 export function engineFor(id: EngineId): SyncEngine {
   if (id === "mutagen") return new MutagenEngine();

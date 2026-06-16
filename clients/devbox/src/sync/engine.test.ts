@@ -5,8 +5,12 @@ describe("engine factory", () => {
   test("mutagen returns the Mutagen engine", () => {
     expect(engineFor("mutagen").id).toBe("mutagen");
   });
-  test("default ignores cover the heavy dirs", () => {
-    expect(DEFAULT_IGNORES).toEqual(["node_modules", "dist", "build", ".next", "target"]);
+  test("default ignores cover heavy dirs and OS/editor cruft", () => {
+    expect(DEFAULT_IGNORES).toContain("node_modules");
+    expect(DEFAULT_IGNORES).toContain("target");
+    expect(DEFAULT_IGNORES).toContain(".DS_Store");
+    expect(DEFAULT_IGNORES).toContain("._*");
+    expect(DEFAULT_IGNORES).toContain("Thumbs.db");
   });
   test("syncthing returns the Syncthing engine", () => {
     expect(engineFor("syncthing").id).toBe("syncthing");
