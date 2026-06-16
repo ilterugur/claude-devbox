@@ -43,9 +43,53 @@ export function loadConfig(): Config {
   try {
     const c = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Config;
     if (!c.profiles?.length) die("config has no profiles");
+    // The `profiles` in config.json are a cache written by gen-editor-config.py. When
+    // we know the claude-devbox checkout (repoPath), read profiles/projects LIVE from
+    // its group_vars/all.yml instead — so `devbox add --write` (which edits all.yml)
+    // shows up immediately with no regen. Falls back to the cache if all.yml is gone
+    // (checkout moved/deleted) or unparseable.
+    if (c.repoPath) {
+      const live = profilesFromYaml(c.repoPath);
+      if (live?.length) c.profiles = live;
+    }
     return c;
   } catch (e) {
     die(`could not read ${CONFIG_PATH}: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * Read profiles/projects live from `<repoPath>/ansible/group_vars/all.yml`, mapping
+ * the Ansible snake_case keys to the CLI's camelCase shape. MUST mirror the mapping in
+ * gen-editor-config.py's write_cli_config (the cache it writes to config.json), so the
+ * live read and the fallback cache behave identically. Returns null on any problem
+ * (missing file, parse error, no/invalid profiles) so callers fall back to the cache.
+ */
+export function profilesFromYaml(repoPath: string): Profile[] | null {
+  try {
+    const path = join(repoPath, "ansible", "group_vars", "all.yml");
+    const doc = Bun.YAML.parse(readFileSync(path, "utf8")) as any;
+    const profs = doc?.profiles;
+    if (!Array.isArray(profs) || profs.length === 0) return null;
+    const out: Profile[] = [];
+    for (const p of profs) {
+      if (!p?.user) return null; // malformed — prefer the cache over a partial list
+      const profile: Profile = {
+        user: String(p.user),
+        projects: Array.isArray(p.projects)
+          ? p.projects.map((pr: any) => ({ name: String(pr.name), repo: pr.repo ? String(pr.repo) : "" }))
+          : [],
+      };
+      if (Array.isArray(p.lazy_mounts) && p.lazy_mounts.length)
+        profile.lazyMounts = p.lazy_mounts.map((m: any) => ({ label: String(m.label), path: String(m.path) }));
+      if (p.sync_engine) profile.syncEngine = p.sync_engine as EngineId;
+      if (p.sync_disk) profile.syncDisk = true;
+      if (p.lazy_mount_on_connect) profile.lazyMountOnConnect = true;
+      out.push(profile);
+    }
+    return out;
+  } catch {
+    return null;
   }
 }
 
