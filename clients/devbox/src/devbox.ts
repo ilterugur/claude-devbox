@@ -27,6 +27,7 @@ import {
 } from "./config";
 import { pickUI } from "./picker";
 import { runPush } from "./push";
+import { runAdd } from "./add";
 import { runMountUp, runMountDown, runMountStatus } from "./mount";
 import { runSyncUp, runSyncDown, runSyncStatus, runSyncPause } from "./sync";
 
@@ -136,6 +137,15 @@ cli
       case "resume": return runSyncPause(cfg, prof, true);
       default: return die(`unknown sync action "${action}" (up|down|status|pause|resume)`);
     }
+  });
+
+cli
+  .command("add [name]", "register the current git repo as a project for a profile (preview; --write edits all.yml)")
+  .option("-p, --profile <profile>", "target profile (default: active)")
+  .option("--branch <branch>", "branch to track (default: current branch)")
+  .option("--write", "edit ansible/group_vars/all.yml in place (needs repoPath; never runs the playbook)")
+  .action((name: string | undefined, opts: { profile?: string; branch?: string; write?: boolean }) => {
+    runAdd(cfg, { name, profile: opts.profile, branch: opts.branch, write: !!opts.write });
   });
 
 cli
