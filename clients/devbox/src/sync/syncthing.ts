@@ -1,6 +1,6 @@
 /**
  * syncthing.ts — Syncthing-backed SyncEngine. Wires device pairing + the single shared
- * folder via each daemon's REST config API: the laptop directly (127.0.0.1:<guiPort>),
+ * folder via each daemon's REST config API: the client directly (127.0.0.1:<guiPort>),
  * the box through an ephemeral `ssh -L` tunnel to its localhost GUI. Pure parsers and
  * payload builders are exported for tests.
  */
@@ -75,7 +75,7 @@ async function ensureFolder(ep: Endpoint, id: string, label: string, path: strin
   await api(ep, "PUT", `/rest/config/folders/${id}`, folderPayload(defaults, { id, label, path, deviceIds }));
 }
 
-function laptopEndpoint(): Endpoint {
+function clientEndpoint(): Endpoint {
   const xml = readFileSync(join(homedir(), "Library", "Application Support", "Syncthing", "config.xml"), "utf8");
   return { base: `http://127.0.0.1:${parseGuiPort(xml)}`, key: parseApiKey(xml) };
 }
@@ -90,9 +90,9 @@ function boxConfigXml(host: string, profile: string): string {
 export class SyncthingEngine implements SyncEngine {
   readonly id = "syncthing" as const;
 
-  /** Pair both devices + share the single folder via REST (laptop direct, box via ssh -L). */
+  /** Pair both devices + share the single folder via REST (client direct, box via ssh -L). */
   async up(o: SyncUpOpts): Promise<void> {
-    const laptop = laptopEndpoint();
+    const client = clientEndpoint();
     const boxXml = boxConfigXml(o.host, o.profile);
     const boxPort = parseGuiPort(boxXml);
     const boxKey = parseApiKey(boxXml);
@@ -103,18 +103,18 @@ export class SyncthingEngine implements SyncEngine {
       await new Promise((r) => setTimeout(r, 1500)); // let the tunnel come up
       const box: Endpoint = { base: `http://127.0.0.1:${lport}`, key: boxKey };
 
-      const laptopID = await myID(laptop);
+      const clientID = await myID(client);
       const boxID = await myID(box);
       const boxAddr = `tcp://${sshHostName(o.host)}:22000`;
 
-      // pair both directions (laptop dials out to the box's Tailscale address; box accepts)
-      await ensureDevice(laptop, devicePayload(boxID, `devbox-${o.profile}`, [boxAddr]));
-      await ensureDevice(box, devicePayload(laptopID, "laptop", []));
+      // pair both directions (client dials out to the box's Tailscale address; box accepts)
+      await ensureDevice(client, devicePayload(boxID, `devbox-${o.profile}`, [boxAddr]));
+      await ensureDevice(box, devicePayload(clientID, "client", []));
 
       // share the single folder on both, with both devices
       const id = folderId(o.profile);
-      await ensureFolder(laptop, id, `devbox · ${o.profile}`, o.localRoot, [laptopID, boxID]);
-      await ensureFolder(box, id, `devbox · ${o.profile}`, o.remoteRoot, [laptopID, boxID]);
+      await ensureFolder(client, id, `devbox · ${o.profile}`, o.localRoot, [clientID, boxID]);
+      await ensureFolder(box, id, `devbox · ${o.profile}`, o.remoteRoot, [clientID, boxID]);
     } catch (e) {
       die(`syncthing wiring failed: ${(e as Error).message}`);
     } finally {
@@ -123,21 +123,21 @@ export class SyncthingEngine implements SyncEngine {
   }
 
   async down(profile: string): Promise<void> {
-    const laptop = laptopEndpoint();
-    try { await api(laptop, "DELETE", `/rest/config/folders/${folderId(profile)}`); } catch { /* already gone */ }
+    const client = clientEndpoint();
+    try { await api(client, "DELETE", `/rest/config/folders/${folderId(profile)}`); } catch { /* already gone */ }
   }
 
   async pause(profile: string): Promise<void> { await this.setPaused(profile, true); }
   async resume(profile: string): Promise<void> { await this.setPaused(profile, false); }
 
   private async setPaused(profile: string, paused: boolean): Promise<void> {
-    const laptop = laptopEndpoint();
-    try { await api(laptop, "PATCH", `/rest/config/folders/${folderId(profile)}`, { paused }); } catch { /* */ }
+    const client = clientEndpoint();
+    try { await api(client, "PATCH", `/rest/config/folders/${folderId(profile)}`, { paused }); } catch { /* */ }
   }
 
   async status(): Promise<SyncStatus[]> {
     let ep: Endpoint;
-    try { ep = laptopEndpoint(); } catch { return []; }
+    try { ep = clientEndpoint(); } catch { return []; }
     try {
       const folders: any[] = await api(ep, "GET", "/rest/config/folders");
       return folders

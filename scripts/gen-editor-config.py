@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Register the dev box in your editors, one entry per profile.
 
-Run on your LAPTOP from the repo (or pass --repo). Reads ansible/inventory.ini +
+Run on your CLIENT from the repo (or pass --repo). Reads ansible/inventory.ini +
 ansible/group_vars/all.yml and writes:
 
   * ~/.ssh/config            — a managed `Host devbox-<user>` block per profile.

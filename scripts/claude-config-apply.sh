@@ -25,7 +25,7 @@ fi
 [ ${#users[@]} -gt 0 ] || { echo "No profiles found." >&2; exit 1; }
 
 # Identity files excluded inline (always); full machine-state list in one shared
-# file used by the laptop->box push too, so they stay in lock-step.
+# file used by the client->box push too, so they stay in lock-step.
 excludes=( --exclude='.credentials.json' --exclude='.claude.json' )
 EXCLUDES_FILE="${CLAUDE_SYNC_EXCLUDES:-/usr/local/share/claude-devbox/sync-excludes.txt}"
 if [ -f "${EXCLUDES_FILE}" ]; then

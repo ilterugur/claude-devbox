@@ -30,7 +30,7 @@ describe("buildSshfsRemoteCmd", () => {
 });
 
 describe("buildSshRArgs", () => {
-  test("forwards box:127.0.0.1:BP -> laptop 127.0.0.1:RP and runs the remote cmd", () => {
+  test("forwards box:127.0.0.1:BP -> client 127.0.0.1:RP and runs the remote cmd", () => {
     expect(buildSshRArgs("devbox-work", 5301, 5301, "REMOTE")).toEqual([
       "-T", "-R", "127.0.0.1:5301:127.0.0.1:5301", "devbox-work", "REMOTE",
     ]);

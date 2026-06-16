@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on your LAPTOP. Curate the PORTABLE subset of your local ~/.claude into
+# Run on your CLIENT. Curate the PORTABLE subset of your local ~/.claude into
 # claude-config/shared/ for syncing to the box. Excludes credentials and
 # machine/session state, and flags non-portable content (macOS paths, localhost
 # endpoints, secrets) you must fix before deploying.

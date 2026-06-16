@@ -4,7 +4,7 @@ allowed-tools: Bash(__PREFIX__ push:*), Bash(~/.local/bin/__PREFIX__ push:*), Ba
 ---
 
 Push **this** Claude Code session to the remote dev box so it can be resumed there,
-rewriting the laptop-local paths embedded in the transcript to the box's paths.
+rewriting the client-local paths embedded in the transcript to the box's paths.
 
 Do this:
 
@@ -18,7 +18,7 @@ Do this:
      re-run the preview with their flags. Do not guess the profile.
 3. Show the user the resolved **target** (host + remote path) and the **remap**
    lines from the preview, and the fork caveat: continuing on the box forks the
-   conversation — this laptop session keeps growing separately.
+   conversation — this client session keeps growing separately.
 4. **Wait for the user to confirm.** Only after they say yes, run the real push:
    `$BIN push --session "$CLAUDE_CODE_SESSION_ID" --yes $ARGUMENTS`
 5. Relay the printed resume command verbatim (`devbox <project> --shell` then

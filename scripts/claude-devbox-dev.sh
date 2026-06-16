@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run as root on the box:  sudo claude-devbox-dev <profile-user> <project> [command...]
 # Starts a project's dev server in a persistent tmux session AS THAT PROFILE USER,
-# so it survives a closed laptop. Preview it via Tailscale Serve / VS Code forward.
+# so it survives a closed client. Preview it via Tailscale Serve / VS Code forward.
 #
 #   sudo claude-devbox-dev work app                 # mise exec -- bun run dev
 #   sudo claude-devbox-dev work app "bun run dev:web"

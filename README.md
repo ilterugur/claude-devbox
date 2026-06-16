@@ -1,13 +1,13 @@
 # claude-devbox
 
 Provision a cheap remote server into an **always-on, multi-profile Claude Code dev
-box** with one Ansible run from your laptop. Built for Bun / Turborepo / Vite /
+box** with one Ansible run from your client. Built for Bun / Turborepo / Vite /
 Docker monorepos.
 
 Each **profile** is its own **Linux user** — isolated `$HOME`, its own SSH key and
 git identity, its own Claude login, its own always-on Remote Control servers. You
-drive it from the **Claude desktop app** (or VS Code Remote-SSH) at your laptop and
-from the **Claude mobile app** when you're out — laptop closed.
+drive it from the **Claude desktop app** (or VS Code Remote-SSH) at your client and
+from the **Claude mobile app** when you're out — client closed.
 
 You edit one vars file, run `ansible-playbook`, add each profile's printed SSH key
 to its GitHub account, and do a single `/login` per profile. After that the box
@@ -31,14 +31,14 @@ runs itself.
 ## Architecture
 
 ```
-  Laptop (desktop app / VS Code Remote-SSH, as a profile user) ─┐
+  Client (desktop app / VS Code Remote-SSH, as a profile user) ─┐
                                                                 ├─► Box ─► Anthropic API
   Phone (Claude mobile app, Remote Control, per profile)       ─┘   profiles = isolated
                                                                      Linux users; Docker
                                                                      services; mise toolchain
 ```
 
-The **box is the host**; laptop and phone are clients (phone works with the laptop
+The **box is the host**; client and phone are just front-ends (the phone works with the client
 off). Billing is tied to each Claude **account**, not the machine.
 
 ## Cost
@@ -74,7 +74,7 @@ preflight + playbook (with your confirmation), and walks you through the manual 
 
 Or do it by hand with the Quickstart below.
 
-## Prerequisites (on your laptop)
+## Prerequisites (on your client)
 
 - `ansible` (`brew install ansible` / `pipx install ansible`)
 - An SSH keypair (`ssh-keygen -t ed25519`)
@@ -122,7 +122,7 @@ switch to that profile's account → your server → new session.
 
 ## Daily use
 
-- **Laptop — Claude desktop app / VS Code Remote-SSH:** connect **as a profile
+- **Client — Claude desktop app / VS Code Remote-SSH:** connect **as a profile
   user** (`ssh work@box`) → that profile's Claude, projects, and git identity.
   Auto port-forwarding for previews. See [docs/realtime-sync.md](docs/realtime-sync.md).
 - **Phone — Claude mobile app:** Code tab → switch to the profile's account → its
@@ -162,7 +162,7 @@ claude-config/   README.md  settings.shared.example.json  shared/ (gitignored)
 scripts/
   claude-devbox-login.sh  claude-config-apply.sh  claude-devbox-dev.sh
   claude-rc-wrapper.sh  claude-rc-run.sh   (box)
-  bundle-local-config.sh  connect.sh        (laptop)
+  bundle-local-config.sh  connect.sh        (client)
 docs/
   multi-account.md  multi-project.md  config-sync.md  runtimes.md
   mobile.md  realtime-sync.md  session-handoff.md
@@ -176,8 +176,8 @@ docs/
 - [Runtimes (mise) & isolation](docs/runtimes.md)
 - [Syncing your Claude config (MCPs/skills/hooks)](docs/config-sync.md)
 - [Driving the box from your phone](docs/mobile.md)
-- [Real-time sync & preview on your laptop](docs/realtime-sync.md)
-- [Moving a session laptop → box (`devbox push`)](docs/session-handoff.md)
+- [Real-time sync & preview on your client](docs/realtime-sync.md)
+- [Moving a session client → box (`devbox push`)](docs/session-handoff.md)
 
 ## Security notes
 

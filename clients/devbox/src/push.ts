@@ -1,6 +1,6 @@
 /**
  * push.ts — `devbox push`: copy a Claude Code session to the box, rewriting the
- * laptop-local absolute paths embedded in it so it resumes against the box's
+ * client-local absolute paths embedded in it so it resumes against the box's
  * filesystem. Pure helpers (buildMappings / applyMappings / rewriteJsonl) are
  * exported for unit tests; runPush() is the orchestration.
  */
@@ -43,7 +43,7 @@ export type Mapping = { from: string; to: string };
 
 /**
  * Build the ordered path-rewrite list: project root, then user --map entries,
- * then (opt-in) the laptop-home remap. Each gets its dash-encoded variant too.
+ * then (opt-in) the client-home remap. Each gets its dash-encoded variant too.
  * Sorted longest-`from`-first so a broad mapping never shadows a specific one.
  */
 export function buildMappings(
@@ -305,7 +305,7 @@ export async function runPush(cfg: Config, opts: PushOpts): Promise<void> {
   if (t.status !== 0) die(`transfer failed (exit ${t.status}); the remote backup .bak-${ts} (if any) is intact`);
 
   out(`  ✓ pushed ${id} -> ${host}:${remoteFile}${sidecarInfo}`);
-  out(`  ⓘ fork: this laptop session keeps growing independently of the box copy.`);
+  out(`  ⓘ fork: this client session keeps growing independently of the box copy.`);
   if (opts.remoteCwd) out(`     continue on the box:  in ${remoteRoot},  claude --resume ${id}`);
   else out(`     continue on the box:  devbox ${projectLabel} --shell   then   claude --resume ${id}`);
 

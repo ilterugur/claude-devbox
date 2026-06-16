@@ -1,7 +1,7 @@
 ---
 name: claude-devbox-setup
 description: >-
-  Set up and drive the claude-devbox toolkit from the user's laptop — provision a
+  Set up and drive the claude-devbox toolkit from the user's client — provision a
   remote, multi-profile, always-on Claude Code dev box (Ansible + mise + per-profile
   Linux users). Use this WHENEVER the user wants to set up, provision, configure,
   bootstrap, or deploy claude-devbox or "a remote Claude Code dev box / dev server";
@@ -34,7 +34,7 @@ touch a GitHub account that isn't the user's.
 Read `$REPO/README.md` and skim `$REPO/docs/` so your guidance matches the repo's
 current behavior rather than your memory — the toolkit evolves.
 
-## Step 1 — Prerequisites (on the laptop)
+## Step 1 — Prerequisites (on the client)
 
 - `ansible --version` — if missing: `brew install ansible` or `pipx install ansible`.
 - `cd $REPO/ansible && ansible-galaxy collection install -r requirements.yml`.

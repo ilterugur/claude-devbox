@@ -36,6 +36,6 @@ describe("REST payload builders", () => {
   });
   test("devicePayload pins addresses (Tailscale) or dynamic", () => {
     expect(devicePayload("BBB", "box", ["tcp://100.1.2.3:22000"]).addresses).toEqual(["tcp://100.1.2.3:22000"]);
-    expect(devicePayload("AAA", "laptop", []).addresses).toEqual(["dynamic"]);
+    expect(devicePayload("AAA", "client", []).addresses).toEqual(["dynamic"]);
   });
 });

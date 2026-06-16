@@ -1,9 +1,9 @@
-# Seeing & running the box in real time on your laptop
+# Seeing & running the box in real time on your client
 
-Goal: Claude works on the box; you close the laptop; you reopen it and see the
+Goal: Claude works on the box; you close the client; you reopen it and see the
 **current** state of your projects and run the live app — full-sync or close to it.
 
-## Mental model: don't sync — make the laptop a live window
+## Mental model: don't sync — make the client a live window
 
 The cleanest setup is **not** to mirror files. Keep one source of truth on the box
 and look at it directly. There's nothing to "sync" because there's only one copy —
@@ -13,7 +13,7 @@ what you open is the box's current state. (If you genuinely need a local copy, s
 ## Register the box in your editors (one command)
 
 ```bash
-python3 scripts/gen-editor-config.py    # run on your laptop
+python3 scripts/gen-editor-config.py    # run on your client
 ```
 
 Per profile it writes a `~/.ssh/config` block (`Host devbox-<user>`) — which VS
@@ -36,17 +36,17 @@ comments is left untouched — it prints the snippet to paste instead).
 - **Claude Desktop** (Code → SSH): has built-in visual **diff review** and server
   previews; watch Claude's changes and the running app from the app itself.
 
-## B) Run/experience the live app in your laptop browser
+## B) Run/experience the live app in your client browser
 
 Dev servers run on the box (start them with `sudo claude-devbox-dev <user> <project>`
-so they survive a closed laptop). Bring them to your laptop browser one of three ways:
+so they survive a closed client). Bring them to your client browser one of three ways:
 
 1. **VS Code Remote-SSH auto port-forward (easiest):** run `bun run dev` in the
-   remote terminal; VS Code forwards the port to `localhost:5173` on your laptop.
+   remote terminal; VS Code forwards the port to `localhost:5173` on your client.
    HMR just works and **no Vite config change is needed** (the browser sees
    `localhost`).
 2. **Tailscale Serve:** on the box, `tailscale serve 5173` → reachable at
-   `https://<box>.<tailnet>.ts.net` over TLS, from laptop **and** phone, without
+   `https://<box>.<tailnet>.ts.net` over TLS, from client **and** phone, without
    exposing any public port.
 3. **Manual SSH tunnel:** `ssh -L 5173:localhost:5173 dev@<box>` → `localhost:5173`.
 
@@ -69,20 +69,20 @@ Only if you want a real local copy (native tooling, offline edits):
 - **[Syncthing](https://syncthing.net/)** — continuous folder mirror.
 
 Most people don't need this with Remote-SSH; it adds conflict handling. Use it only
-if "the files must also live on my laptop" is a hard requirement.
+if "the files must also live on my client" is a hard requirement.
 
 ## The "close → Claude works → reopen" flow
 
 1. Dev servers run on the box in tmux (`sudo claude-devbox-dev <user> <project>`) →
-   survive a closed laptop.
+   survive a closed client.
 2. Claude's always-on Remote Control servers keep working (see [mobile.md](mobile.md)).
-3. Reopen the laptop:
+3. Reopen the client:
    - **VS Code Remote-SSH** reconnects → current files (whatever Claude did).
    - **Remote Control** → rejoin the session where Claude left off.
    - Browser at the **Tailscale Serve / forwarded URL** → the app's current state
      (Vite already hot-reloaded).
 
-Nothing depended on the laptop, so reopening is inherently "in sync."
+Nothing depended on the client, so reopening is inherently "in sync."
 
 ## References
 

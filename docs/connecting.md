@@ -1,6 +1,6 @@
 # Connecting to the box
 
-The box is the host; your laptop and phone are clients. There are several ways to
+The box is the host; your client and phone are just front-ends to it. There are several ways to
 reach it — they differ mainly in **UI** and in **what happens when the connection
 drops**. Pick by situation.
 
@@ -25,7 +25,7 @@ An always-on `claude remote-control` server runs on the box per `(profile, proje
   **profile's Claude account** → tap the server → new/continue session.
 - **Disconnect (network loss, lid close):** the agent **keeps running on the box**; reconnect
   resumes the same session. A long task continues with your phone off.
-- Best for: phones, flaky connections, laptop closed. See [mobile.md](mobile.md).
+- Best for: phones, flaky connections, client closed. See [mobile.md](mobile.md).
 
 ### 2. mosh + tmux — terminal, roaming-resilient (best for flaky connections)
 
@@ -49,7 +49,7 @@ falls back to `ssh` if mosh isn't available. Under the hood it's
   tailscale0**, so the `devbox` alias must point at the box's **Tailscale** address —
   run `gen-editor-config.py --host <tailscale-100.x-IP>` — use the **100.x IP**, not the
   MagicDNS name (mosh often can't resolve MagicDNS). Clients: this machine on
-  Tailscale + `brew install mosh` (laptop) or Blink / Termius (phone).
+  Tailscale + `brew install mosh` (client) or Blink / Termius (phone).
 - Best for: mobile, switching cells/Wi‑Fi, a real terminal.
 
 ### 3. Claude Desktop — integrated SSH remote project (desk only)
@@ -87,7 +87,7 @@ ssh <user>@<box>            # profile user to code, admin to maintain
 
 | Method | UI | Survives a disconnect? | Best for |
 | --- | --- | --- | --- |
-| Remote Control | phone / web | ✅ agent runs on the box | phone, flaky net, laptop off |
+| Remote Control | phone / web | ✅ agent runs on the box | phone, flaky net, client off |
 | mosh + tmux | terminal (`claude` TUI) | ✅✅ auto-reconnect + persistent | mobile, flaky connections, terminal lovers |
 | Claude Desktop integrated SSH | desktop app | ❌ session drops, no resume | stable desk work |
 | VS Code / Cursor Remote-SSH | editor | ⚠️ editor reconnects; `claude` only if in tmux | editing on the box |

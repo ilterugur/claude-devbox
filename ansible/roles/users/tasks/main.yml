@@ -20,11 +20,11 @@
   loop_control:
     label: "{{ item.user }}"
 
-# This is LOGIN auth only: your laptop key lets you `ssh work@box` (so the desktop
+# This is LOGIN auth only: your client key lets you `ssh work@box` (so the desktop
 # app / VS Code Remote-SSH land directly in that profile's env). It does NOT change
 # the profile's GIT identity — git push/pull uses the profile's OWN key generated
 # below. The two are independent; profile identity stays isolated.
-- name: Allow your laptop key to SSH in AS each profile (for desktop app / Remote-SSH)
+- name: Allow your client key to SSH in AS each profile (for desktop app / Remote-SSH)
   ansible.posix.authorized_key:
     user: "{{ item.user }}"
     key: "{{ operator_ssh_pubkey }}"

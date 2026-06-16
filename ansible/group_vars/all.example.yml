@@ -12,7 +12,7 @@
 
 # ── Admin user (Ansible connects as this; has sudo). NOT a Claude profile. ────
 operator_user: admin
-operator_ssh_pubkey: "ssh-ed25519 AAAA...REPLACE_ME you@laptop"
+operator_ssh_pubkey: "ssh-ed25519 AAAA...REPLACE_ME you@client"
 operator_private_key_path: "~/.ssh/id_ed25519" # for the pre-hardening probe
 
 # ── Box tuning ────────────────────────────────────────────────────────────────
@@ -56,16 +56,16 @@ profiles:
         capacity: 4 # Claude's flag default is 32; 4 is gentler on RAM
 
     # ── File bridge (optional) — see docs/file-bridge.md ──────────────────────
-    # Lazy, read-only, full-depth windows onto laptop paths. The box mounts these
-    # at /home/<user>/mnt/<label> while your laptop is online (gone when it sleeps).
-    # Declared here; gen-editor-config.py propagates them to the laptop CLI config.
+    # Lazy, read-only, full-depth windows onto client paths. The box mounts these
+    # at /home/<user>/mnt/<label> while your client is online (gone when it sleeps).
+    # Declared here; gen-editor-config.py propagates them to the client CLI config.
     # lazy_mounts:
     #   - { label: desktop,   path: "~/Desktop" }
     #   - { label: documents, path: "~/Documents" }
     # lazy_mount_on_connect: true   # auto `devbox mount up` when you connect
     #
     # Two-way sync "disk" (~/devbox/<user> <-> /home/<user>/sync). Drop folders in;
-    # they stay on the box when the laptop is closed.
+    # they stay on the box when the client is closed.
     # sync_disk: true
     # sync_engine: mutagen          # mutagen (default) | syncthing (provision: --tags syncthing)
 
@@ -90,7 +90,7 @@ claude_sync_settings: false # settings.json/hooks are machine-coupled; opt in
 #  profile, so the agent on the box can drive a headless browser (navigate/click/
 #  snapshot, console + network) and do deeper debugging (performance traces / Web
 #  Vitals, throttling) — e.g. to test your web app. This is NOT
-#  "Claude in Chrome" (that extension is client-side, on your laptop). For sites
+#  "Claude in Chrome" (that extension is client-side, on your client). For sites
 #  that block datacenter IPs / throw CAPTCHAs you'd add a stealth/proxy layer
 #  (Steel, Browserbase) on top. Set to false to skip Chrome + Playwright.
 browser_automation: true

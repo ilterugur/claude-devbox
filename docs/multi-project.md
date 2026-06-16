@@ -55,7 +55,7 @@ tasks don't collide) — up to `capacity` concurrent sessions (this repo default
 ## Running dev servers
 
 Provisioning clones + installs but doesn't start long-running dev servers. Start
-them persistently (so they survive a closed laptop):
+them persistently (so they survive a closed client):
 
 ```bash
 ssh admin@<box>
@@ -63,7 +63,7 @@ sudo claude-devbox-dev work app                  # mise exec -- bun run dev
 sudo claude-devbox-dev work app "bun run dev:web"
 ```
 
-Preview from your laptop — see [realtime-sync.md](realtime-sync.md).
+Preview from your client — see [realtime-sync.md](realtime-sync.md).
 
 ## Adding a project or profile later
 

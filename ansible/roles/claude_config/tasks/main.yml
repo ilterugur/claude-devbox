@@ -1,5 +1,5 @@
 ---
-- name: Check for a curated shared-config source on the laptop
+- name: Check for a curated shared-config source on the client
   ansible.builtin.stat:
     path: "{{ claude_config_src }}"
   delegate_to: localhost
@@ -34,7 +34,7 @@
     mode: "0644"
   when: sync_claude_config | bool
 
-- name: Push curated config (laptop -> box)
+- name: Push curated config (client -> box)
   ansible.posix.synchronize:
     src: "{{ claude_config_src }}/"
     dest: /opt/claude-shared/

@@ -70,7 +70,7 @@ export function reconcileBridges(path: string = BRIDGES_PATH): LiveMount[] {
   return kept;
 }
 
-/** The laptop-side sync "disk" root for a profile (~/devbox/<profile>). */
+/** The client-side sync "disk" root for a profile (~/devbox/<profile>). */
 export const syncDiskRoot = (profile: string): string => join(homedir(), "devbox", profile);
 
 /** Grab a free localhost TCP port by binding to :0 and reading the assigned port. */

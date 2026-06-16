@@ -110,7 +110,7 @@ cli
   });
 
 cli
-  .command("mount [action]", "lazy-mount configured laptop paths on the box (action: up|down|status)")
+  .command("mount [action]", "lazy-mount configured client paths on the box (action: up|down|status)")
   .option("-p, --profile <profile>", "target profile")
   .option("--label <label>", "only this mount (for down)")
   .action((action: string | undefined, opts: { profile?: string; label?: string }) => {

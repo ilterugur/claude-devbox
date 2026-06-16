@@ -1,6 +1,6 @@
 /**
- * mount.ts — `devbox mount`: expose configured laptop paths to the box as ephemeral,
- * read-only, full-depth mounts. A laptop-side `rclone serve sftp` (jailed to the path,
+ * mount.ts — `devbox mount`: expose configured client paths to the box as ephemeral,
+ * read-only, full-depth mounts. A client-side `rclone serve sftp` (jailed to the path,
  * --read-only, key-auth) is reached by the box over an `ssh -R` reverse tunnel and
  * mounted with `sshfs -f`. Pure builders are exported for unit tests; runMountUp/Down
  * orchestrate. Honors DEVBOX_DRYRUN=1 (print, don't execute).

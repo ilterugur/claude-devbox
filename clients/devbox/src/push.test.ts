@@ -76,7 +76,7 @@ describe("applyMappings / rewriteJsonl", () => {
   });
 
   test("single pass: a later mapping never clobbers an earlier mapping's output", () => {
-    // remoteRoot deliberately contains the laptop-home substring; with a sequential
+    // remoteRoot deliberately contains the client-home substring; with a sequential
     // re-scanning replace, the home mapping would corrupt the project-root output.
     const mappings = buildMappings("/Users/alnzy/proj", "/tmp/X-Users-alnzy-Y", { profile: "work", remapHome: true });
     expect(applyMappings("/Users/alnzy/proj/src/file.ts", mappings)).toBe("/tmp/X-Users-alnzy-Y/src/file.ts");

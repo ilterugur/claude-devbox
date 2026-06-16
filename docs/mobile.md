@@ -1,11 +1,11 @@
 # Driving the box from your phone
 
-Goal: laptop closed, you start and steer Claude Code tasks **on the box** from your
+Goal: client closed, you start and steer Claude Code tasks **on the box** from your
 phone — including brand-new sessions.
 
-## Why this works with the laptop off
+## Why this works with the client off
 
-The box is the host; your laptop and phone are only clients. Each profile's
+The box is the host; your client and phone are only front-ends. Each profile's
 `servers` entry runs an always-on `claude remote-control` server (in tmux, kept
 alive by systemd, as that profile's user). Remote Control is **outbound HTTPS
 only** — no inbound ports — so it reaches your phone through the firewall and
@@ -38,11 +38,11 @@ That's it — the servers come online within ~15s of login.
 | You want | Works? | How |
 | --- | --- | --- |
 | Start a new session from phone, runs on the box | ✅ | A `claude-rc-*` server must be running (it is, always-on) |
-| Laptop fully off | ✅ | Box is the host; nothing depends on the laptop |
+| Client fully off | ✅ | Box is the host; nothing depends on the client |
 | Steer/continue a running session | ✅ | Same server, same phone UI |
 | Spawn the box from zero with no server running | ❌ | At least one `claude-rc-*` server must be alive — that's what the always-on service guarantees |
 | `claude.ai/code` web "new session" running on the box | ❌ | The web's own new-session runs on **Anthropic cloud**, not your box. Always connect to **your** server. |
-| Dispatch (start tasks from phone) | ❌ here | Dispatch needs the **desktop app** running on a Mac/Windows — useless with the laptop off |
+| Dispatch (start tasks from phone) | ❌ here | Dispatch needs the **desktop app** running on a Mac/Windows — useless with the client off |
 
 ## Caveats
 
@@ -67,7 +67,7 @@ The easiest entry point is the `devbox` command that `gen-editor-config.py` writ
 into your shell rc (one command, profile as an argument):
 
 ```bash
-# phone: Blink or Termius (both speak mosh) + the Tailscale app, OR laptop terminal
+# phone: Blink or Termius (both speak mosh) + the Tailscale app, OR client terminal
 devbox                 # default profile → persistent tmux (mosh, ssh fallback)
 devbox <profile>       # a specific profile; `devbox <profile> <session>` for a named one
 #   inside the session:
@@ -77,7 +77,7 @@ claude            # drop signal / close the lid → reconnect resumes the same s
 `devbox` is just `mosh <prefix>-<profile> -- tmux new -A -s <session>`; run
 `gen-editor-config.py --host <tailscale-100.x-IP>` (the **100.x IP**, not the MagicDNS
 name — mosh often can't resolve MagicDNS) so the alias resolves over Tailscale (mosh
-UDP is tailscale-only). From the laptop you can also run
+UDP is tailscale-only). From the client you can also run
 `scripts/connect.sh mosh <user>` (needs `brew install mosh` locally).
 
 > **Why not Claude Desktop's integrated SSH for this?** Its remote‑project SSH mode

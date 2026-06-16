@@ -1,13 +1,13 @@
-# Moving a session from your laptop to the box (`devbox push`)
+# Moving a session from your client to the box (`devbox push`)
 
-Start a Claude Code conversation on your laptop, then continue it **on the box**.
+Start a Claude Code conversation on your client, then continue it **on the box**.
 `devbox push` copies the session transcript to the box and rewrites the
-laptop-local absolute paths embedded in it so `claude --resume <id>` works there.
+client-local absolute paths embedded in it so `claude --resume <id>` works there.
 
 ## TL;DR
 
 ```bash
-# from inside the project, on your laptop:
+# from inside the project, on your client:
 devbox push                 # pushes the current session ($CLAUDE_CODE_SESSION_ID)
 devbox push --pick          # or fuzzy-pick a recent session
 devbox push --go            # push, then jump onto the box and resume in one step
@@ -30,15 +30,15 @@ A session is `~/.claude/projects/<encoded-cwd>/<id>.jsonl` — plus a sibling
 when the session spawned subagents. The encoded dir name is the absolute working
 directory with every `/` and `.` turned into `-`.
 
-The transcript embeds your laptop's absolute paths (the project root, file reads,
+The transcript embeds your client's absolute paths (the project root, file reads,
 the encoded-dir token in shell commands). On the box those paths don't exist, so
 `devbox push` rewrites them:
 
 - the **project root** `…/<project>` → `/home/<profile>/projects/<project>` (and
   its dash-encoded form), always;
 - extra mappings via `--map OLD=NEW` (repeatable);
-- the laptop home `/Users/<you>` → `/home/<profile>` only with `--remap-home`
-  (off by default — your laptop username differs from the profile name, and
+- the client home `/Users/<you>` → `/home/<profile>` only with `--remap-home`
+  (off by default — your client username differs from the profile name, and
   `~/.claude` paths differ on the box).
 
 The matching box profile/project is derived from your git `origin` (the same way
@@ -80,10 +80,10 @@ a rewrite preview, and the remote commands — and writes nothing.
 
 ## ⚠️ It's a fork, not a sync
 
-After a push, the laptop copy and the box copy are **independent**. Your laptop
+After a push, the client copy and the box copy are **independent**. Your client
 session keeps growing on its own; edits on the box don't flow back, and vice
 versa. Pick one place to continue. `--go` resumes on the box immediately — treat
-the laptop session as read-only afterwards. (For a live shared workspace instead
+the client session as read-only afterwards. (For a live shared workspace instead
 of a handoff, use Remote-SSH — see [realtime-sync.md](realtime-sync.md).)
 
 For the box to be useful after resume, the project must already be checked out

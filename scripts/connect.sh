@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on your LAPTOP. Convenience wrapper around ssh into the box.
+# Run on your CLIENT. Convenience wrapper around ssh into the box.
 #   export DEVBOX_HOST=admin@mybox        # your operator_user @ box (Tailscale name)
 #
 # Usage:
@@ -10,7 +10,7 @@
 #   connect.sh mosh <user> [session]    # roaming-resilient terminal AS a profile,
 #                                       #   into a persistent tmux session (run `claude`
 #                                       #   inside). Survives network drops; reconnect
-#                                       #   resumes. Needs mosh on this laptop + on the
+#                                       #   resumes. Needs mosh on this client + on the
 #                                       #   box (mosh_enabled), and Tailscale up.
 #   connect.sh devup <user> <project> [cmd]   # start a project's dev server
 #   connect.sh serve <port>             # tailscale-serve a dev port for preview
@@ -29,7 +29,7 @@ case "${cmd}" in
   attach) u="${1:?usage: connect.sh attach <user> <project>}"; p="${2:?project required}"
           exec ssh -t "${HOST}" "sudo -u ${u} tmux -L claude-rc-${u}-${p} attach -t claude-rc-${u}-${p}" ;;
   mosh)   u="${1:?usage: connect.sh mosh <user> [session]}"; sess="${2:-main}"
-          command -v mosh >/dev/null || { echo "mosh not installed on this laptop (brew install mosh)" >&2; exit 1; }
+          command -v mosh >/dev/null || { echo "mosh not installed on this client (brew install mosh)" >&2; exit 1; }
           exec mosh "${u}@${HOST#*@}" -- tmux new -A -s "${sess}" ;;
   devup)  u="${1:?usage: connect.sh devup <user> <project> [cmd]}"; p="${2:?project required}"; shift 2 || true
           exec ssh -t "${HOST}" "sudo claude-devbox-dev ${u} ${p} $*" ;;

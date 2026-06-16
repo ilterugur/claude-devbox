@@ -4,7 +4,7 @@
 # profile — Playwright (drive the browser: navigate/click/snapshot, console + network)
 # and Chrome DevTools (deeper debugging: performance traces / Web Vitals, throttling).
 # Both run the system Chrome headless. This is NOT "Claude in Chrome" (that extension
-# is client-side, on your laptop).
+# is client-side, on your client).
 
 - name: Install supporting fonts for headless Chrome rendering
   ansible.builtin.apt:

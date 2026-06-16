@@ -28,7 +28,7 @@ const out = (s: string) => process.stdout.write(s + "\n");
 const README = `# devbox sync disk
 
 Anything in this folder is continuously TWO-WAY synced to the box at /home/<profile>/sync and
-stays available there even when this laptop is closed.
+stays available there even when this client is closed.
 
 - Edits flow both ways. Conflicts are surfaced (run \`devbox sync status\`), never auto-merged.
 - These are ignored (never synced): .git, node_modules, dist, build, .next, target.
