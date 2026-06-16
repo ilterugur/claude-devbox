@@ -28,7 +28,9 @@ export type Profile = {
 };
 // `host` is written by gen-editor-config.py for reference only — the CLI resolves
 // the box via the ssh alias `${prefix}-${profile}` (HostName lives in ~/.ssh/config).
-export type Config = { prefix: string; default: string; locale: string; launch: string; host?: string; profiles: Profile[] };
+// `repoPath` is the claude-devbox checkout this config was generated from (written by
+// gen-editor-config.py --cli) — `devbox add --write` edits its group_vars/all.yml.
+export type Config = { prefix: string; default: string; locale: string; launch: string; host?: string; repoPath?: string; profiles: Profile[] };
 
 export function die(msg: string): never {
   if (process.env.NODE_ENV === "test") throw new Error(msg); // testable: don't kill the runner

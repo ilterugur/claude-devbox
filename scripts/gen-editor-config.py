@@ -352,7 +352,7 @@ def strip_managed_block(path):
     print(f"  ✓ removed the shell function from {short} (the CLI on PATH is now `{os.path.basename(path)}`'s devbox)")
 
 
-def write_cli_config(profiles, prefix, host, default, locale, launch):
+def write_cli_config(profiles, prefix, host, default, locale, launch, repo):
     """Write ~/.config/claude-devbox/config.json for the Bun CLI to read."""
     cfg = {
         "prefix": prefix,
@@ -360,6 +360,7 @@ def write_cli_config(profiles, prefix, host, default, locale, launch):
         "default": default,
         "locale": locale,
         "launch": launch,
+        "repoPath": repo,  # so `devbox add --write` can find ansible/group_vars/all.yml
         "profiles": [
             {"user": p["user"],
              "projects": [{"name": pr["name"], "repo": pr.get("repo", "")} for pr in (p.get("projects") or [])],
@@ -402,16 +403,21 @@ def install_cli(repo, prefix):
     print(f"  ✓ installed `{prefix}` -> ~/.local/bin/{prefix} (runs the Bun CLI)")
     if bindir not in os.environ.get("PATH", "").split(os.pathsep):
         print(f"  ! ~/.local/bin is not on your PATH — add: export PATH=\"$HOME/.local/bin:$PATH\"")
-    # Install the /<prefix>-push slash command (session handoff) into ~/.claude/commands/.
-    cmd_src = os.path.join(cli_dir, "commands", "devbox-push.md")
-    if os.path.exists(cmd_src):
+    # Install the bundled slash commands (devbox-*.md) into ~/.claude/commands/,
+    # renaming the `devbox` prefix to the configured one and substituting __PREFIX__.
+    cmds_src_dir = os.path.join(cli_dir, "commands")
+    if os.path.isdir(cmds_src_dir):
         cmds_dir = os.path.expanduser("~/.claude/commands")
         os.makedirs(cmds_dir, exist_ok=True)
-        with open(cmd_src) as f:
-            body = f.read().replace("__PREFIX__", prefix)
-        with open(os.path.join(cmds_dir, f"{prefix}-push.md"), "w") as f:
-            f.write(body)
-        print(f"  ✓ installed `/{prefix}-push` -> ~/.claude/commands/{prefix}-push.md")
+        for fn in sorted(os.listdir(cmds_src_dir)):
+            if not fn.endswith(".md"):
+                continue
+            with open(os.path.join(cmds_src_dir, fn)) as f:
+                body = f.read().replace("__PREFIX__", prefix)
+            dest_name = fn.replace("devbox", prefix, 1)  # devbox-push.md -> <prefix>-push.md
+            with open(os.path.join(cmds_dir, dest_name), "w") as f:
+                f.write(body)
+            print(f"  ✓ installed `/{dest_name[:-3]}` -> ~/.claude/commands/{dest_name}")
     return wrapper
 
 
@@ -451,7 +457,7 @@ def main():
     if args.cli:
         # Bun CLI mode: write its config, install it on PATH, and remove the shell
         # function (a same-named shell function would shadow the CLI binary on PATH).
-        write_cli_config(profiles, args.prefix, host, default, args.locale, args.launch)
+        write_cli_config(profiles, args.prefix, host, default, args.locale, args.launch, repo)
         installed = install_cli(repo, args.prefix)
         if installed:
             strip_managed_block(shell_rc_path(args.shell_rc))
