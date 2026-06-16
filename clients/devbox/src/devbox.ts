@@ -164,4 +164,9 @@ cli
 
 cli.help();
 cli.version("0.1.0");
-cli.parse();
+// `bun run src/devbox.ts …` yields argv [bun, script.ts, …args]; a compiled standalone
+// binary yields [exe, …args] — one fewer. cac parses from argv[2], so for the compiled
+// case reinsert a placeholder "script" slot, otherwise the first arg (the command) is lost.
+const argv = process.argv;
+const fromSource = argv[1]?.endsWith(".ts") || argv[1]?.endsWith(".js");
+cli.parse(fromSource ? argv : [argv[0]!, "devbox", ...argv.slice(1)]);

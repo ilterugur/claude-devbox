@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { buildCreateArgs, buildStatusArgs, sessionName } from "./mutagen";
+import { buildCreateArgs, buildStatusArgs, sessionName, goAgentFile } from "./mutagen";
+
+describe("goAgentFile", () => {
+  test("maps uname -m to the mutagen agent bundle filename", () => {
+    expect(goAgentFile("x86_64")).toBe("linux_amd64");
+    expect(goAgentFile("amd64\n")).toBe("linux_amd64");
+    expect(goAgentFile("aarch64")).toBe("linux_arm64");
+    expect(goAgentFile("arm64")).toBe("linux_arm64");
+    expect(goAgentFile("riscv64")).toBeNull();
+  });
+});
 
 const opts = {
   profile: "work", host: "devbox-work",

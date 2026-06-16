@@ -7,7 +7,7 @@
     "devbox": "./src/devbox.ts"
   },
   "scripts": {
-    "build": "bun build --compile --minify src/devbox.ts --outfile dist/devbox",
+    "build": "bun build --compile --minify --external react-devtools-core src/devbox.ts --outfile dist/devbox",
     "dev": "bun run src/devbox.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
