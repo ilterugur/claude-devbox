@@ -9,6 +9,32 @@
   loop_control:
     label: "{{ item.user }}"
 
+# Profiles are unprivileged by default (isolation). Opt a profile into passwordless
+# sudo with `sudo: true` in all.yml. Profile users have no password, so NOPASSWD is
+# the only form that works. Managed via a per-profile sudoers.d drop-in, visudo-
+# validated; flipping `sudo` back to false (or omitting it) removes the file.
+- name: Grant per-profile passwordless sudo (profile.sudo == true)
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/devbox-{{ item.user }}"
+    content: "{{ item.user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when: item.sudo | default(false)
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Revoke per-profile sudo when not enabled
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/devbox-{{ item.user }}"
+    state: absent
+  when: not (item.sudo | default(false))
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
 - name: Create per-profile .ssh dirs
   ansible.builtin.file:
     path: "/home/{{ item.user }}/.ssh"

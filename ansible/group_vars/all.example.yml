@@ -46,6 +46,9 @@ profiles:
   - user: work # Linux username for this profile
     git_name: "Your Name"
     git_email: "you@work.example"
+    # sudo: true   # opt this profile into passwordless (NOPASSWD) full sudo on the box.
+                  # Default false: profiles are unprivileged for isolation. Flipping it
+                  # back to false (or removing it) revokes sudo on the next playbook run.
     # An ed25519 SSH key is generated at /home/work/.ssh/id_ed25519 — add the
     # printed PUBLIC key to THIS profile's GitHub account (docs/multi-project.md).
     projects:
