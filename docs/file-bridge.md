@@ -67,3 +67,23 @@ disabled and the listener is pinned to the box's Tailscale IP.
 Conflicts: Syncthing writes `*.sync-conflict-*` files and keeps deleted/replaced copies under
 `.stversions` (Trash-Can versioning on both peers). `devbox sync status` shows folder state; use
 the Syncthing GUI for per-file conflict detail.
+
+## Troubleshooting: Mutagen "agent ... Permission denied" on a hardened box
+
+On boxes whose OpenSSH 9+ `scp` transfers via SFTP, a plain `scp` drops the file's execute
+bit (a 755 source lands 644), so Mutagen's auto-copied agent can't run:
+
+```
+unable to install agent: ... /bin/bash: line 1: ./.mutagen-agentXXXX: Permission denied
+```
+
+Fix: pre-stage the agent once (it matches the client's Mutagen version), then `devbox sync up`
+works because Mutagen finds the existing agent and skips the copy. From the client:
+
+```sh
+ver=$(mutagen version)                       # e.g. 0.18.1
+tmp=$(mktemp -d); tar xzf "$(brew --prefix)/Cellar/mutagen/$ver/libexec/mutagen-agents.tar.gz" -C "$tmp"
+ssh <prefix>-<profile> "mkdir -p ~/.mutagen/agents/$ver"
+scp "$tmp/linux_amd64" <prefix>-<profile>:~/.mutagen/agents/$ver/mutagen-agent
+ssh <prefix>-<profile> "chmod +x ~/.mutagen/agents/$ver/mutagen-agent"   # scp dropped +x
+```

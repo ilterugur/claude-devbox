@@ -24,11 +24,11 @@ export function buildCreateArgs(o: SyncUpOpts): string[] {
 }
 
 export function buildStatusArgs(): string[] {
-  // NOTE: the template field paths (.Session.Name) are mutagen-version-sensitive — verify against
-  // the installed mutagen before trusting `devbox sync status`. The char between }} and {{ is a TAB.
+  // Fields verified against mutagen 0.18.1: each list element exposes .Name / .Status /
+  // .Conflicts directly. The char between }} and {{ is a literal TAB (Go emits it verbatim).
   return [
     "sync", "list", "--label-selector=devbox=true",
-    "--template", '{{range .}}{{.Session.Name}}\t{{.Status}}\t{{len .Conflicts}}{{"\\n"}}{{end}}',
+    "--template", '{{range .}}{{.Name}}\t{{.Status}}\t{{len .Conflicts}}{{"\\n"}}{{end}}',
   ];
 }
 

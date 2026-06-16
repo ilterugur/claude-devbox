@@ -28,7 +28,7 @@ describe("mutagen argv", () => {
     const a = buildStatusArgs();
     expect(a).toEqual([
       "sync", "list", "--label-selector=devbox=true",
-      "--template", '{{range .}}{{.Session.Name}}\t{{.Status}}\t{{len .Conflicts}}{{"\\n"}}{{end}}',
+      "--template", '{{range .}}{{.Name}}\t{{.Status}}\t{{len .Conflicts}}{{"\\n"}}{{end}}',
     ]);
   });
 });
