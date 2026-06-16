@@ -63,15 +63,21 @@ def find_repo(arg):
     die("couldn't locate the claude-devbox repo; pass --repo PATH")
 
 
-def box_host(repo, override):
+def connect_host(repo, override, v):
+    """The host the `devbox-*` ssh aliases (and mosh) connect to. Precedence:
+    --host > group_vars `connect_host` > inventory.ini `ansible_host`. The group_vars
+    value lets a hardened box pin the Tailscale IP for connect (mosh's UDP range is
+    opened on tailscale0 only) while Ansible keeps provisioning over the public IP."""
     if override:
         return override
+    if v.get("connect_host"):
+        return v["connect_host"]
     inv = os.path.join(repo, "ansible", "inventory.ini")
     if os.path.exists(inv):
         m = re.search(r"ansible_host\s*=\s*(\S+)", open(inv).read())
         if m:
             return m.group(1)
-    die("no ansible_host in inventory.ini; pass --host")
+    die("no connect_host in group_vars/all.yml and no ansible_host in inventory.ini; pass --host")
 
 
 def load_vars(repo):
@@ -425,7 +431,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo")
     ap.add_argument("--prefix", default="devbox")
-    ap.add_argument("--host", help="override the box hostname (else from inventory.ini)")
+    ap.add_argument("--host", help="host the ssh aliases connect to (else group_vars connect_host, else inventory.ini ansible_host)")
     ap.add_argument("--key", help="override IdentityFile (else operator_private_key_path)")
     ap.add_argument("--zed", action="store_true", help="write Zed config even if Zed isn't detected")
     ap.add_argument("--no-zed", action="store_true")
@@ -442,7 +448,7 @@ def main():
     profiles = v.get("profiles") or []
     if not profiles:
         die("no profiles in group_vars/all.yml")
-    host = box_host(repo, args.host)
+    host = connect_host(repo, args.host, v)
     key = args.key or v.get("operator_private_key_path") or "~/.ssh/id_ed25519"
     users = [p["user"] for p in profiles]
     default = args.default or users[0]
