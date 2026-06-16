@@ -23,9 +23,14 @@ describe("toSshUrl", () => {
 });
 
 describe("projectEntry", () => {
-  test("6-space indented block matching group_vars", () => {
+  test("6-space indented block matching group_vars, with full schema", () => {
     expect(projectEntry({ name: "myproj", repo: "git@github.com:org/myproj.git", branch: "main" })).toBe(
-      '      - name: myproj\n        repo: "git@github.com:org/myproj.git"\n        branch: main\n',
+      "      - name: myproj\n" +
+        '        repo: "git@github.com:org/myproj.git"\n' +
+        "        branch: main\n" +
+        "        install: true # run `bun install` after clone\n" +
+        "        update: false # don't git-pull over Claude's local edits\n" +
+        "        ports: []\n",
     );
   });
 });

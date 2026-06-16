@@ -4,7 +4,11 @@
     repo: "{{ item.1.repo }}"
     dest: "/home/{{ item.0.user }}/projects/{{ item.1.name }}"
     version: "{{ item.1.branch | default('main') }}"
-    update: "{{ item.1['update'] | default(false) }}" # never clobber Claude's edits
+    # Use .get(), NOT item.1.update or item.1['update']: on ansible-core 2.21 both
+    # resolve 'update' to the dict's built-in .update() METHOD (which `default` can't
+    # rescue, since a method is "defined") and crash with a builtin_function_or_method
+    # error. .get('update', false) does a real key lookup.
+    update: "{{ item.1.get('update', false) }}" # never clobber Claude's edits
     accept_hostkey: true
   become_user: "{{ item.0.user }}"
   environment:
@@ -15,11 +19,18 @@
   register: clone_results
   failed_when: false # don't abort the whole run if a key isn't on GitHub yet
 
-- name: "Report any clones that failed (usually a missing GitHub SSH key)"
+- name: "Report any clones that failed"
+  # Only blame a missing GitHub SSH key on a REAL auth/permission error; for anything
+  # else (e.g. a templating crash) surface the git module's actual message instead of
+  # masking it with misleading SSH-key advice.
   ansible.builtin.debug:
     msg: >-
+      {% if (item.msg | default('')) is search('Permission denied|publickey|[Aa]uthentication failed|access rights|Could not read from remote|Host key verification') %}
       Clone failed for {{ item.item.0.user }}/{{ item.item.1.name }} — add that
       profile's printed SSH public key to its GitHub account, then re-run.
+      {% else %}
+      Clone failed for {{ item.item.0.user }}/{{ item.item.1.name }}: {{ item.msg | default('see the task output above') }}
+      {% endif %}
   loop: "{{ clone_results.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
   loop_control:
     label: "{{ item.item.0.user }}/{{ item.item.1.name }}"
@@ -105,7 +116,7 @@
     label: "{{ item.0.user }}/{{ item.1.name }}"
     index_var: ridx
   when:
-    - item.1.install | default(true)
+    - item.1.get('install', true)
     - repo_git.results[ridx].stat.exists
   changed_when: false
 

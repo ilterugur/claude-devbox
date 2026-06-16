@@ -48,9 +48,19 @@ export function detectProject(opts: { name?: string; branch?: string; cwd?: stri
   return { name, repo: toSshUrl(origin), branch };
 }
 
-/** The YAML block for one project, indented to match group_vars (6-space list items). */
+/** The YAML block for one project, indented to match group_vars (6-space list items).
+ *  Writes the FULL schema (install/update/ports) — a partial entry crashes the projects
+ *  role, because a missing `update` key makes Jinja's `item.update` resolve to the dict's
+ *  built-in .update() method instead of the value. Defaults mirror all.example.yml. */
 export function projectEntry(d: Detected): string {
-  return `      - name: ${d.name}\n        repo: "${d.repo}"\n        branch: ${d.branch}\n`;
+  return (
+    `      - name: ${d.name}\n` +
+    `        repo: "${d.repo}"\n` +
+    `        branch: ${d.branch}\n` +
+    `        install: true # run \`bun install\` after clone\n` +
+    `        update: false # don't git-pull over Claude's local edits\n` +
+    `        ports: []\n`
+  );
 }
 
 /**
