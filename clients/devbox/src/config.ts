@@ -174,9 +174,18 @@ export function connect(
   const tmux = ["tmux", "new", "-A", "-s", sess, "-c", dir];
   const launch = opts.launch ?? cfg.launch;
   if (!opts.shellOnly && launch) tmux.push("bash", "-lc", `${launch}; exec bash`);
-  // Hide tmux's status bar (the green strip) for this session — chained as a second
-  // tmux command via a literal ";" arg (works for both the mosh argv and the ssh
-  // string, since tmux treats a bare ";" as a command separator).
+  // Tune the session for a remote terminal, chained as extra tmux commands via literal
+  // ";" args (works for both the mosh argv and the ssh string — tmux treats a bare ";"
+  // as a command separator). Default tmux over mosh/ssh feels broken otherwise:
+  //   escape-time 0    default 500ms makes keystrokes lag/drop over the link.
+  //   set-clipboard on copy escapes to the *system* clipboard via OSC-52 instead of
+  //                    landing only in tmux's internal buffer ("copied to tmux session").
+  //   mouse off        let the terminal own selection/scroll, so ⌘C/⌘V and native
+  //                    selection just work; tmux's mouse mode otherwise hijacks them.
+  //   status off       hide tmux's green status strip for this session.
+  tmux.push(";", "set", "-g", "escape-time", "0");
+  tmux.push(";", "set", "-g", "set-clipboard", "on");
+  tmux.push(";", "set", "-g", "mouse", "off");
   tmux.push(";", "set", "status", "off");
 
   const useMosh = Bun.which("mosh") != null;
