@@ -1,4 +1,4 @@
-import { MouseProvider, useOnMouseClick } from "@zenobius/ink-mouse";
+import { MouseProvider, useMouse, useOnMouseClick } from "@zenobius/ink-mouse";
 import { Box, type DOMElement, render, Text, useInput } from "ink";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -11,6 +11,20 @@ const ACTIONS = [
   { value: "__home__" as const, label: "open in HOME" },
   { value: "__new__" as const, label: "new project" },
 ];
+
+/** ink-mouse registers one click listener per clickable <Row> on a single shared
+ *  EventEmitter. With more than ~10 rows that trips Node's default max-listeners cap
+ *  and floods the terminal with MaxListenersExceededWarning. Lift the cap once from
+ *  inside the provider (so we have the emitter in context) — clicks are bounded by
+ *  the visible rows, not a genuine leak. Renders nothing. */
+function LiftListenerCap() {
+  const { events } = useMouse();
+  useEffect(() => {
+    // `emitter` is a private field of ink-mouse's TypedEventEmitter — reach through it.
+    (events as unknown as { emitter?: { setMaxListeners?: (n: number) => void } })?.emitter?.setMaxListeners?.(0);
+  }, [events]);
+  return null;
+}
 
 /** Subsequence fuzzy match (e.g. "isc" matches "insurchat"). */
 function fuzzy(label: string, query: string): boolean {
@@ -193,6 +207,7 @@ export function pickUI(profiles: PickProfile[], active: string): Promise<{ profi
   return new Promise((resolve) => {
     const app = render(
       <MouseProvider>
+        <LiftListenerCap />
         <Picker
           profiles={profiles}
           active={active}
@@ -294,6 +309,7 @@ export function pickSessionUI(sessions: SessionPick[], title?: string): Promise<
   return new Promise((resolve) => {
     const app = render(
       <MouseProvider>
+        <LiftListenerCap />
         <SessionPicker
           sessions={sessions}
           title={title}

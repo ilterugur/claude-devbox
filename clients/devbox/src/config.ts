@@ -435,12 +435,23 @@ export function listRemoteSessions(host: string, profile: string): RemoteSession
   const glob = `/home/${profile}/.claude/projects/*/*.jsonl`;
   const sessions = parseRemoteStream(sshRead(host, enumScript(glob)));
   sessions.sort((a, b) => b.mtime - a.mtime);
-  return sessions;
+  // The same session id can live under several box project dirs (a session resumed
+  // in more than one cwd). Collapse to one row per id — newest wins — so each session
+  // shows once and downstream React keys stay unique.
+  const seen = new Set<string>();
+  return sessions.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
 }
 
 /** Locate a single box session by id (across the profile's project dirs). */
 export function getRemoteSession(host: string, profile: string, id: string): RemoteSession | null {
   const glob = `/home/${profile}/.claude/projects/*/${id}.jsonl`;
   const sessions = parseRemoteStream(sshRead(host, enumScript(glob)));
+  // Same id can match in multiple project dirs — resolve to the newest, matching
+  // what listRemoteSessions shows.
+  sessions.sort((a, b) => b.mtime - a.mtime);
   return sessions[0] ?? null;
 }
