@@ -52,3 +52,12 @@
   loop: "{{ profiles }}"
   loop_control:
     label: "{{ item.user }}"
+
+- name: Deploy the custom tagging retain hook (shared, all profiles)
+  ansible.builtin.copy:
+    src: hindsight-retain-tagged.py
+    dest: /usr/local/bin/hindsight-retain-tagged
+    owner: root
+    group: root
+    mode: "0755"
+  when: not (hindsight_per_project | default(false))
