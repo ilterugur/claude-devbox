@@ -23,3 +23,7 @@ test("parseSwap reads each swap device with bytes + priority", () => {
 test("parseSwap returns [] for empty input", () => {
   expect(parseSwap("")).toEqual([]);
 });
+
+test("parseSwap skips malformed lines with too few fields", () => {
+  expect(parseSwap("/swapfile file 123")).toEqual([]);
+});

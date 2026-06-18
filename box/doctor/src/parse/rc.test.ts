@@ -17,3 +17,7 @@ test("parseRcUnits reads unit/load/active/sub", () => {
   expect(units[1].active).toBe("failed");
   expect(units[1].sub).toBe("failed");
 });
+
+test("parseRcUnits skips malformed claude-rc lines with too few fields", () => {
+  expect(parseRcUnits("claude-rc-x.service loaded active")).toEqual([]);
+});
