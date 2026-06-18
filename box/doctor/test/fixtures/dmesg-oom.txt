@@ -1,0 +1,2 @@
+[Thu Jun 18 07:50:01 2026] some unrelated kernel line
+[Thu Jun 18 07:53:25 2026] Out of memory: Killed process 273394 (bun) total-vm:83501736kB, anon-rss:6838904kB, file-rss:2696kB, shmem-rss:0kB, UID:1001 pgtables:18872kB oom_score_adj:0
