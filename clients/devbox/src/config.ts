@@ -161,11 +161,25 @@ export const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 /** The ssh/mosh host alias for a profile (e.g. `devbox-work`). */
 export const hostFor = (cfg: Config, prof: string) => `${cfg.prefix}-${prof}`;
 
+/** Connection transport into the box-side tmux session. "auto" = et > mosh > ssh. */
+export type Transport = "auto" | "et" | "mosh" | "ssh";
+
+/** Resolve the wanted transport: explicit per-call opt > DEVBOX_TRANSPORT env > legacy
+ *  DEVBOX_NO_MOSH (forces ssh) > "auto". "none" is accepted as an alias for "ssh". */
+export function resolveTransport(opt?: Transport): Transport {
+  const raw = (opt ?? process.env.DEVBOX_TRANSPORT ?? "").toLowerCase();
+  if (raw === "none") return "ssh";
+  if (raw === "et" || raw === "mosh" || raw === "ssh" || raw === "auto") return raw;
+  if (raw) { process.stderr.write(`devbox: unknown transport "${raw}" (et|mosh|ssh|auto) — using auto\n`); }
+  if (process.env.DEVBOX_NO_MOSH != null) return "ssh"; // back-compat
+  return "auto";
+}
+
 export function connect(
   cfg: Config,
   prof: string,
   project: string | null,
-  opts: { shellOnly?: boolean; launch?: string; dir?: string; noMosh?: boolean } = {},
+  opts: { shellOnly?: boolean; launch?: string; dir?: string; transport?: Transport } = {},
 ) {
   const sess = project || "main"; // treat "" like null (an empty tmux -s name is rejected)
   const dir = opts.dir ?? (project ? `/home/${prof}/projects/${project}` : `/home/${prof}`);
@@ -188,23 +202,30 @@ export function connect(
   tmux.push(";", "set", "-g", "mouse", "off");
   tmux.push(";", "set", "status", "off");
 
-  // Transport precedence: et > mosh > ssh. All three attach the SAME box-side tmux
-  // session, so they're interchangeable per-connect.
+  // Pick the transport. All three attach the SAME box-side tmux session, so they're
+  // interchangeable per-connect:
   //   et (Eternal Terminal): TCP, auto-reconnect/roaming like mosh but no predictive
-  //     echo — the fix for mosh dropping/garbling keystrokes on macOS. Preferred when
-  //     installed locally (brew install et) and the box runs etserver (et_enabled).
+  //     echo — the fix for mosh dropping/garbling keystrokes on macOS. Needs `et`
+  //     locally (brew install et) and etserver on the box (et_enabled).
   //   mosh: roaming over UDP, but predictive echo misbehaves on some macOS clients.
   //   ssh: plain; tmux still gives persistence, just no roaming/auto-reconnect.
-  // `--ssh` / DEVBOX_NO_MOSH=1 forces plain ssh (skips both et and mosh).
-  const forceSsh = opts.noMosh || process.env.DEVBOX_NO_MOSH != null;
-  const useEt = !forceSsh && Bun.which("et") != null;
-  const useMosh = !forceSsh && !useEt && Bun.which("mosh") != null;
+  // Choose via --et/--mosh/--ssh, --transport <t>, or DEVBOX_TRANSPORT; default "auto"
+  // prefers et > mosh > ssh by what's installed. An explicit choice whose binary is
+  // missing falls back to ssh with a note (rather than failing).
+  const want = resolveTransport(opts.transport);
+  const has = (b: string) => Bun.which(b) != null;
+  let pick: Transport;
+  if (want === "auto") pick = has("et") ? "et" : has("mosh") ? "mosh" : "ssh";
+  else if (want !== "ssh" && !has(want)) {
+    process.stderr.write(`devbox: ${want} not installed locally — falling back to ssh\n`);
+    pick = "ssh";
+  } else pick = want;
   // mosh forwards argv after `--` intact (no shell). et and ssh take one shell-parsed
   // command string on the box, so build a properly-quoted string for them.
   const remote = tmux.map(shQuote).join(" ");
   let cmd: string, args: string[];
-  if (useEt) { cmd = "et"; args = [host, "-c", remote]; }
-  else if (useMosh) { cmd = "mosh"; args = [host, "--", ...tmux]; }
+  if (pick === "et") { cmd = "et"; args = [host, "-c", remote]; }
+  else if (pick === "mosh") { cmd = "mosh"; args = [host, "--", ...tmux]; }
   else { cmd = "ssh"; args = ["-t", host, remote]; }
 
   if (process.env.DEVBOX_DRYRUN) {

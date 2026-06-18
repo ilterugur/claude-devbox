@@ -12,6 +12,7 @@ import { cac } from "cac";
 import { spawnSync } from "node:child_process";
 import {
   type Config,
+  type Transport,
   connect,
   die,
   gitMatch,
@@ -183,10 +184,14 @@ cli
   .option("-p, --profile <profile>", "use this profile for this call only")
   .option("-m, --menu", "force the picker (skip git auto-open)")
   .option("-s, --shell", "open a plain shell (skip the auto-launch)")
-  .option("--ssh", "connect over plain ssh+tmux, skipping et/mosh (also: DEVBOX_NO_MOSH=1)")
-  .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean; ssh?: boolean }) => {
+  .option("--transport <t>", "connection transport: auto|et|mosh|ssh (also: DEVBOX_TRANSPORT)")
+  .option("--et", "force Eternal Terminal (shortcut for --transport et)")
+  .option("--mosh", "force mosh (shortcut for --transport mosh)")
+  .option("--ssh", "force plain ssh+tmux, skipping et/mosh (shortcut for --transport ssh)")
+  .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean; transport?: string; et?: boolean; mosh?: boolean; ssh?: boolean }) => {
     const prof = resolveProfile(cfg, opts.profile);
-    const co = { shellOnly: !!opts.shell, noMosh: !!opts.ssh };
+    const transport = (opts.transport ?? (opts.ssh ? "ssh" : opts.et ? "et" : opts.mosh ? "mosh" : undefined)) as Transport | undefined;
+    const co = { shellOnly: !!opts.shell, transport };
     if (lazyMountOnConnect(cfg, prof) && lazyMountsFor(cfg, prof).length) {
       try { runMountUp(cfg, prof); } catch (e) { process.stderr.write(`devbox: lazy mount skipped: ${(e as Error).message}\n`); }
     }
