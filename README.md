@@ -178,7 +178,7 @@ docs/
 - [Driving the box from your phone](docs/mobile.md)
 - [Real-time sync & preview on your client](docs/realtime-sync.md)
 - [Moving a session client → box (`devbox push`)](docs/session-handoff.md)
-- [Long-term memory (Hindsight)](docs/memory.md) — profile-wide agent memory wired into Claude Code, auto-tagged per project
+- [Long-term memory (Hindsight)](docs/memory.md)
 
 ## Security notes
 

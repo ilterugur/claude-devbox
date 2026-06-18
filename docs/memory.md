@@ -35,8 +35,7 @@ Three pieces cooperate once provisioning runs:
    and delete memories. Useful for explicit "remember this" or "forget that"
    instructions, or for filtered recall (e.g. query restricted to a single project).
 
-Underneath all of this runs a **fully local daemon** — `uvx hindsight-embed` on
-port 9077, one per profile. It stores memories on disk and handles the embedding
+Underneath all of this runs a **fully local daemon** (`uvx hindsight-embed`, the plugin's default port 9077), one per profile. It stores memories on disk and handles the embedding
 work locally. **Only LLM extraction and recall calls leave the box** (to whichever
 LLM provider you configure). The embeddings themselves never leave: remote
 embeddings are not supported through this integration, and the daemon's default
