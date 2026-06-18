@@ -1,4 +1,7 @@
 {# Managed by Ansible (claude-devbox). One unit per (profile, project). #}
+{# Merge global rc_limits / rc_build_env defaults with per-server overrides. #}
+{% set L = (rc_limits | default({})) | combine(item.1.limits | default({})) %}
+{% set BENV = (rc_build_env | default({})) | combine(item.1.build_env | default({})) %}
 [Unit]
 Description=Claude remote-control ({{ item.0.user }}-{{ item.1.project }})
 After=network-online.target tailscaled.service
@@ -15,13 +18,34 @@ Environment=PATH=/home/{{ item.0.user }}/.local/bin:/usr/local/sbin:/usr/local/b
    (~/.claude.json in HOME). The run script defaults its credential-check path to
    ~/.claude on its own. #}
 Environment=CLAUDE_RC_PROJECT_DIR=/home/{{ item.0.user }}/projects/{{ item.1.project }}
-Environment=CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}
+{# Quote values: names like "Verti Monorepo" contain spaces — unquoted, systemd
+   parses everything after the space as a second, invalid env assignment. #}
+Environment="CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}"
 Environment=CLAUDE_RC_SPAWN={{ item.1.spawn | default('worktree') }}
 Environment=CLAUDE_RC_CAPACITY={{ item.1.capacity | default(4) }}
 {# Hindsight (when enabled): load the profile's HINDSIGHT_USER_ID + HINDSIGHT_API_LLM_* so the memory hooks/daemon work in RC sessions too. The leading '-' makes it optional, so the unit is unaffected when Hindsight is disabled and the file is absent. uvx resolves via `mise activate --shims` in claude-rc-run. #}
 EnvironmentFile=-/home/{{ item.0.user }}/.hindsight/llm.env
+{% for k, v in BENV.items() %}
+Environment="{{ k }}={{ v }}"
+{% endfor %}
 ExecStart=/usr/local/bin/claude-rc-wrapper {{ item.0.user }}-{{ item.1.project }}
 ExecStop=/usr/bin/tmux -L claude-rc-{{ item.0.user }}-{{ item.1.project }} kill-server
-
+{# ── Resource control (systemd cgroup) — keep one build from taking the box ── #}
+{% if L.memory_high | default('') %}MemoryHigh={{ L.memory_high }}
+{% endif %}
+{%- if L.memory_max | default('') %}MemoryMax={{ L.memory_max }}
+{% endif %}
+{%- if L.memory_swap_max | default('') %}MemorySwapMax={{ L.memory_swap_max }}
+{% endif %}
+{%- if L.cpu_weight | default('') %}CPUWeight={{ L.cpu_weight }}
+{% endif %}
+{%- if L.cpu_quota | default('') %}CPUQuota={{ L.cpu_quota }}
+{% endif %}
+{%- if L.io_weight | default('') %}IOWeight={{ L.io_weight }}
+{% endif %}
+{%- if L.nice is defined and L.nice != '' %}Nice={{ L.nice }}
+{% endif %}
+{%- if L.oom_score_adjust is defined and L.oom_score_adjust != '' %}OOMScoreAdjust={{ L.oom_score_adjust }}
+{% endif %}
 [Install]
 WantedBy=multi-user.target
