@@ -63,9 +63,27 @@
     mode: "0755"
   when: not (hindsight_per_project | default(false))
 
-- name: Register the Hindsight plugin marketplace per profile (idempotent)
+# Pre-clone the marketplace repo ourselves and register it from the LOCAL path:
+# `claude plugin marketplace add <owner/repo>` makes Claude do its own network clone,
+# which is broken in some Claude Code versions (ERR_STREAM_PREMATURE_CLOSE) even though
+# plain `git clone` works. Cloning here and adding the local path sidesteps that.
+- name: Clone the Hindsight plugin marketplace per profile (local, avoids Claude's buggy network clone)
+  ansible.builtin.git:
+    repo: https://github.com/vectorize-io/hindsight.git
+    dest: "/home/{{ item.user }}/.claude/plugins/marketplaces/vectorize-io-hindsight"
+    version: main
+    depth: 1
+    force: true
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Register the Hindsight plugin marketplace from the local clone (idempotent)
   ansible.builtin.command:
-    cmd: "/home/{{ item.user }}/.local/bin/claude plugin marketplace add vectorize-io/hindsight"
+    cmd: "/home/{{ item.user }}/.local/bin/claude plugin marketplace add /home/{{ item.user }}/.claude/plugins/marketplaces/vectorize-io-hindsight"
   become_user: "{{ item.user }}"
   environment:
     HOME: "/home/{{ item.user }}"
@@ -78,6 +96,7 @@
     and 'already' not in (hs_marketplace.stderr | default('') | lower)
   failed_when:
     - hs_marketplace.rc != 0
+    - "'already' not in (hs_marketplace.stdout | default('') | lower)"
     - "'already' not in (hs_marketplace.stderr | default('') | lower)"
 
 - name: Install the hindsight-memory plugin per profile (idempotent)
@@ -95,6 +114,7 @@
     and 'already' not in (hs_install.stderr | default('') | lower)
   failed_when:
     - hs_install.rc != 0
+    - "'already' not in (hs_install.stdout | default('') | lower)"
     - "'already' not in (hs_install.stderr | default('') | lower)"
 
 - name: Register the custom tagging Stop hook in each profile's settings.json
