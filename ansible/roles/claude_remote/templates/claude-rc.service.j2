@@ -18,6 +18,8 @@ Environment=CLAUDE_RC_PROJECT_DIR=/home/{{ item.0.user }}/projects/{{ item.1.pro
 Environment=CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}
 Environment=CLAUDE_RC_SPAWN={{ item.1.spawn | default('worktree') }}
 Environment=CLAUDE_RC_CAPACITY={{ item.1.capacity | default(4) }}
+{# Hindsight (when enabled): load the profile's HINDSIGHT_USER_ID + HINDSIGHT_API_LLM_* so the memory hooks/daemon work in RC sessions too. The leading '-' makes it optional, so the unit is unaffected when Hindsight is disabled and the file is absent. uvx resolves via `mise activate --shims` in claude-rc-run. #}
+EnvironmentFile=-/home/{{ item.0.user }}/.hindsight/llm.env
 ExecStart=/usr/local/bin/claude-rc-wrapper {{ item.0.user }}-{{ item.1.project }}
 ExecStop=/usr/bin/tmux -L claude-rc-{{ item.0.user }}-{{ item.1.project }} kill-server
 

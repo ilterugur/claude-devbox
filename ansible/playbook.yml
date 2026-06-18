@@ -45,6 +45,32 @@
       when: ansible_user | default('') == 'root'
       tags: [always]
 
+    - name: Assert Hindsight is configured when enabled
+      ansible.builtin.assert:
+        that:
+          - hindsight_llm_provider | default('') | length > 0
+          - >-
+            (hindsight_llm_api_key | default('') | length > 0)
+            or (hindsight_llm_base_url | default('') | length > 0)
+            or (hindsight_llm_provider | default('') | lower in ['ollama', 'local'])
+        fail_msg: >-
+          hindsight_enabled is true but the LLM provider isn't configured. Set
+          hindsight_llm_provider and either hindsight_llm_api_key, a custom
+          hindsight_llm_base_url, or a keyless provider (ollama/local). See
+          docs/memory.md. (Set hindsight_enabled: false to skip Hindsight.)
+      when: hindsight_enabled | default(true) | bool
+      tags: [always, hindsight]
+
+    - name: Assert uv is available for the Hindsight daemon
+      ansible.builtin.assert:
+        that:
+          - runtimes.uv is defined
+        fail_msg: >-
+          hindsight_enabled is true but `uv` is not in `runtimes`. The Hindsight daemon
+          runs via `uvx hindsight-embed`. Add `uv: "latest"` under runtimes.
+      when: hindsight_enabled | default(true) | bool
+      tags: [always, hindsight]
+
   # Role tags let you target one thing on an already-provisioned box, e.g.
   #   ansible-playbook playbook.yml --tags projects     # add/clone a new repo
   #   ansible-playbook playbook.yml --tags runtime       # bump a runtime version
@@ -76,6 +102,12 @@
     # ON BY DEFAULT (set browser_automation: false to skip): headless Chrome +
     # Playwright MCP per profile.
     - { role: browser, tags: [browser], when: "browser_automation | default(true)" }
+    # ON BY DEFAULT (set hindsight_enabled: false to skip): Vectorize Hindsight
+    # long-term agent memory wired into Claude Code per profile. ONE profile-wide
+    # bank (cross-project, personal-assistant style) with auto-tags for later
+    # filtering. Local daemon (uvx hindsight-embed, port 9077); only LLM calls leave
+    # the box.
+    - { role: hindsight, tags: [hindsight], when: "hindsight_enabled | default(true)" }
     # OPT-IN cleanup. `never` keeps it OUT of normal runs entirely — it only runs
     # when you explicitly ask: `ansible-playbook playbook.yml --tags prune`.
     - { role: prune, tags: [prune, never] }

@@ -1,0 +1,165 @@
+---
+# On by default (hindsight_enabled: true; set false to skip). Per profile: install
+# the Vectorize Hindsight Claude Code plugin, configure a SINGLE profile-wide memory
+# bank (personal-assistant style — remembers you across all projects), disable the
+# plugin's own auto-retain, and install a custom Stop hook that retains WITH verti-
+# style tags (source/profile/project) so memories can be filtered later. Generic LLM
+# provider via the HINDSIGHT_API_LLM_* env file. Embeddings are local (daemon default).
+
+- name: Ensure ~/.hindsight exists per profile
+  ansible.builtin.file:
+    path: "/home/{{ item.user }}/.hindsight"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0700"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Render the per-profile LLM env file (0600 — keeps the key off other profiles)
+  ansible.builtin.template:
+    src: llm.env.j2
+    dest: "/home/{{ item.user }}/.hindsight/llm.env"
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0600"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+
+- name: Write the Hindsight Claude Code bank config per profile
+  ansible.builtin.template:
+    src: claude-code.json.j2
+    dest: "/home/{{ item.user }}/.hindsight/claude-code.json"
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0600"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Source the Hindsight env file from each profile's interactive shell
+  ansible.builtin.blockinfile:
+    path: "/home/{{ item.user }}/.bashrc"
+    create: true
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (claude-devbox hindsight)"
+    block: |
+      [ -f "$HOME/.hindsight/llm.env" ] && set -a && . "$HOME/.hindsight/llm.env" && set +a
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Deploy the custom tagging retain hook (shared, all profiles)
+  ansible.builtin.copy:
+    src: hindsight-retain-tagged.py
+    dest: /usr/local/bin/hindsight-retain-tagged
+    owner: root
+    group: root
+    mode: "0755"
+  when: not (hindsight_per_project | default(false))
+
+- name: Register the Hindsight plugin marketplace per profile (idempotent)
+  ansible.builtin.command:
+    cmd: "/home/{{ item.user }}/.local/bin/claude plugin marketplace add vectorize-io/hindsight"
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  register: hs_marketplace
+  changed_when: >-
+    'already' not in (hs_marketplace.stdout | default('') | lower)
+    and 'already' not in (hs_marketplace.stderr | default('') | lower)
+  failed_when:
+    - hs_marketplace.rc != 0
+    - "'already' not in (hs_marketplace.stderr | default('') | lower)"
+
+- name: Install the hindsight-memory plugin per profile (idempotent)
+  ansible.builtin.command:
+    cmd: "/home/{{ item.user }}/.local/bin/claude plugin install hindsight-memory"
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  register: hs_install
+  changed_when: >-
+    'already' not in (hs_install.stdout | default('') | lower)
+    and 'already' not in (hs_install.stderr | default('') | lower)
+  failed_when:
+    - hs_install.rc != 0
+    - "'already' not in (hs_install.stderr | default('') | lower)"
+
+- name: Register the custom tagging Stop hook in each profile's settings.json
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c 'import json,os;
+      p=os.path.expanduser("~/.claude/settings.json");
+      d=json.load(open(p)) if os.path.exists(p) else {};
+      h=d.setdefault("hooks",{});
+      stop=h.setdefault("Stop",[]);
+      cmd="python3 /usr/local/bin/hindsight-retain-tagged";
+      present=any(any(i.get("command")==cmd for i in g.get("hooks",[])) for g in stop);
+      stop.append({"hooks":[{"type":"command","command":cmd,"timeout":20}]}) if not present else None;
+      json.dump(d,open(p,"w"),indent=2)'
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when: not (hindsight_per_project | default(false))
+  changed_when: false
+
+# ── Optional Tailscale-only exposure (hindsight_expose_tailscale) ──────────────
+- name: Install socat for the Hindsight tailnet proxy
+  ansible.builtin.apt:
+    name: socat
+    state: present
+    update_cache: true
+  when: hindsight_expose_tailscale | default(false)
+
+- name: Render a per-profile Hindsight proxy unit (tailnet only)
+  ansible.builtin.template:
+    src: hindsight-proxy.service.j2
+    dest: "/etc/systemd/system/hindsight-proxy-{{ item.user }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when: hindsight_expose_tailscale | default(false)
+
+- name: Enable and start each Hindsight proxy (tailnet only)
+  ansible.builtin.systemd_service:
+    name: "hindsight-proxy-{{ item.user }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when: hindsight_expose_tailscale | default(false)
+
+- name: Allow the Hindsight proxy port over Tailscale only (per profile)
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: tailscale0
+    proto: tcp
+    port: "{{ (hindsight_expose_base_port | default(19077)) + idx }}"
+    comment: "hindsight memory proxy ({{ item.user }}) over tailscale"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when: hindsight_expose_tailscale | default(false)

@@ -104,6 +104,35 @@ claude_sync_settings: false # settings.json/hooks are machine-coupled; opt in
 #  (Steel, Browserbase) on top. Set to false to skip Chrome + Playwright.
 browser_automation: true
 
+# ── Long-term agent memory: Vectorize Hindsight (ON by default) ────────────────
+#  Wires Hindsight into Claude Code per profile: a UserPromptSubmit hook recalls
+#  relevant memories into context; a Stop hook retains new facts after each response.
+#  Runs fully local per profile (uvx hindsight-embed daemon, port 9077); ONLY the LLM
+#  extraction/recall calls leave the box. Memory is ONE profile-wide bank (it remembers
+#  you across ALL your projects — personal-assistant style), auto-tagged with
+#  source/profile/project so you can filter it later via the agent_knowledge_* tools.
+#  Requires `uv` in runtimes (the daemon runs via uvx). READ docs/memory.md.
+hindsight_enabled: true
+#  LLM provider for memory extraction/recall — generic, any Hindsight-supported
+#  provider (openai | anthropic | gemini | groq | ollama | openrouter | ...), including
+#  a custom OpenAI-compatible endpoint via hindsight_llm_base_url.
+hindsight_llm_provider: "openrouter"
+hindsight_llm_api_key: "REPLACE_ME" # required, except keyless providers (ollama/local)
+hindsight_llm_model: "openai/gpt-4o-mini" # any model the provider serves ("" = provider default)
+hindsight_llm_base_url: "" # optional custom OpenAI-compatible endpoint ("" = provider default)
+#  Base port for the per-profile local daemon (loopback). Each profile gets base+index
+#  (9077, 9078, …) so multiple profiles don't collide. Single profile stays on 9077.
+# hindsight_base_port: 9077
+#  Expose the per-profile Hindsight daemon to your TAILNET (never public): a socat
+#  proxy per profile on 0.0.0.0:(expose_base+index), UFW-scoped to tailscale0 only.
+#  Lets you query/browse memory from your client over Tailscale. Auth is tailnet-only
+#  (the daemon has none — rely on your Tailscale ACLs). Default off (loopback only).
+# hindsight_expose_tailscale: false
+# hindsight_expose_base_port: 19077   # external (tailnet) base port; profile gets base+index
+#  Escape hatch: true = isolated per-project banks instead of one tagged profile bank.
+#  Default false (profile-wide + tags) — per-project fragments personal-assistant memory.
+# hindsight_per_project: false
+
 # ── Roaming-resilient terminal: mosh (+ tmux) (ON by default) ─────────────────
 #  Installs mosh and opens its UDP range on the tailscale0 interface only. mosh
 #  survives network drops / IP changes (mobile, switching networks) and tmux keeps `claude`

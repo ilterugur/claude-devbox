@@ -1,0 +1,14 @@
+{
+{% if hindsight_per_project | default(false) %}
+  "dynamicBankId": true,
+  "dynamicBankGranularity": ["agent", "project"],
+  "autoRetain": true,
+{% else %}
+  "dynamicBankId": false,
+  "bankId": "{{ item.user }}",
+  "autoRetain": false,
+{% endif %}
+  "autoRecall": true,
+  "enableKnowledgeTools": true,
+  "hindsightApiUrl": ""
+}
