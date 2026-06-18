@@ -10,6 +10,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { ensureClientTransport } from "./install";
 
 export const CFG_DIR = join(homedir(), ".config", "claude-devbox");
 export const CONFIG_PATH = join(CFG_DIR, "config.json");
@@ -210,16 +211,22 @@ export function connect(
   //   mosh: roaming over UDP, but predictive echo misbehaves on some macOS clients.
   //   ssh: plain; tmux still gives persistence, just no roaming/auto-reconnect.
   // Choose via --et/--mosh/--ssh, --transport <t>, or DEVBOX_TRANSPORT; default "auto"
-  // prefers et > mosh > ssh by what's installed. An explicit choice whose binary is
-  // missing falls back to ssh with a note (rather than failing).
+  // prefers et > mosh > ssh by what's installed. A missing client binary triggers a
+  // confirm-then-install prompt (ensureClientTransport); decline/failure falls back to
+  // ssh. In auto mode we only offer to install when NO accelerator is present (so a box
+  // that already has mosh isn't nagged); an explicit choice always offers to install it.
   const want = resolveTransport(opts.transport);
   const has = (b: string) => Bun.which(b) != null;
   let pick: Transport;
-  if (want === "auto") pick = has("et") ? "et" : has("mosh") ? "mosh" : "ssh";
-  else if (want !== "ssh" && !has(want)) {
-    process.stderr.write(`devbox: ${want} not installed locally — falling back to ssh\n`);
+  if (process.env.DEVBOX_DRYRUN) {
+    pick = want === "auto" ? (has("et") ? "et" : has("mosh") ? "mosh" : "ssh") : want;
+  } else if (want === "auto") {
+    pick = has("et") ? "et" : has("mosh") ? "mosh" : (ensureClientTransport("et") ? "et" : "ssh");
+  } else if (want === "ssh") {
     pick = "ssh";
-  } else pick = want;
+  } else {
+    pick = ensureClientTransport(want) ? want : "ssh";
+  }
   // mosh forwards argv after `--` intact (no shell). et and ssh take one shell-parsed
   // command string on the box, so build a properly-quoted string for them.
   const remote = tmux.map(shQuote).join(" ");
