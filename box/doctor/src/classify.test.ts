@@ -50,3 +50,17 @@ test("isWorktreeProtected: no process references the path => not protected", () 
   ];
   expect(isWorktreeProtected(wtPath, procs)).toBe(false);
 });
+
+test("classifySession: activity in the middle band (between window and idle) => active", () => {
+  const s = classifySession(
+    { pid: 1, lastActivity: NOW - 20 * 60 },
+    { now: NOW, activityWindowSec: ACTIVITY_WINDOW, idleAfterSec: IDLE_AFTER },
+  );
+  expect(s).toBe("active");
+});
+
+test("isWorktreeProtected: a trailing slash on the worktree path still matches", () => {
+  const wt = "/home/ilterugur/projects/x/.claude/worktrees/bridge-cse_z";
+  const procs: ProcRef[] = [{ pid: 5, cmd: `bun build --cwd ${wt}/src` }];
+  expect(isWorktreeProtected(wt + "/", procs)).toBe(true);
+});
