@@ -6,6 +6,35 @@
 # style tags (source/profile/project) so memories can be filtered later. Generic LLM
 # provider via the HINDSIGHT_API_LLM_* env file. Embeddings are local (daemon default).
 
-- name: Hindsight role placeholder (replaced in later tasks)
-  ansible.builtin.debug:
-    msg: "hindsight role: {{ profiles | map(attribute='user') | join(', ') }}"
+- name: Ensure ~/.hindsight exists per profile
+  ansible.builtin.file:
+    path: "/home/{{ item.user }}/.hindsight"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0700"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Render the per-profile LLM env file (0600 — keeps the key off other profiles)
+  ansible.builtin.template:
+    src: llm.env.j2
+    dest: "/home/{{ item.user }}/.hindsight/llm.env"
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0600"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+
+- name: Write the Hindsight Claude Code bank config per profile
+  ansible.builtin.template:
+    src: claude-code.json.j2
+    dest: "/home/{{ item.user }}/.hindsight/claude-code.json"
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0600"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
