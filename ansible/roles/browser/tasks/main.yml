@@ -44,7 +44,7 @@
 
 - name: Wire browser MCP servers into each profile (user scope ~/.claude.json)
   # Idempotent: sets only the "playwright" + "chrome-devtools" mcpServers entries,
-  # preserving any others (e.g. agentmemory). Both launch via npx at runtime; node/npx
+  # preserving any others. Both launch via npx at runtime; node/npx
   # resolve through mise shims for the Remote Control service and interactive sessions.
   #   playwright       — drive the headless system Chrome (navigate/click/snapshot,
   #                      console + network inspection). The default for automation.
