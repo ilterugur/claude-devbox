@@ -7,8 +7,11 @@
 # takes effect whenever the daemon is reachable during a run. Override any of these
 # in group_vars/all.yml.
 
-# How often a Claude Code session flushes a retain (higher = fewer, less noisy writes).
-hindsight_retain_every_n_turns: 4
+# How often a session flushes a retain. LOWER = more frequent = noisier (1 = every turn).
+# The whole session is sent each time (retainMode full-session) and a forced final retain
+# at session end captures short sessions, so a HIGHER value just means fewer redundant
+# re-extractions — less duplication, no data loss. Plugin default is 10.
+hindsight_retain_every_n_turns: 10
 
 # reflect_mission — the bank's persona used when surfacing/reflecting on memory.
 hindsight_bank_mission: >-
