@@ -184,6 +184,67 @@ make sure the profile's account can reach the new repo (`gh repo view`). A new
 per-profile-per-project: one always-on Remote Control server per project, which is the
 right granularity — you attach to each project independently from the phone).
 
+## Connecting local agents to the box's Hindsight memory (optional)
+
+The `hindsight` role provisions long-term memory ON THE BOX (per profile: a local
+`uvx hindsight-embed` daemon, the `hindsight-memory` Claude Code plugin, a
+profile-wide bank named after the profile, and — when `hindsight_expose_tailscale:
+true` — a Tailscale-Serve HTTPS API at `https://<node>.<tailnet>.ts.net:<serve_port>`).
+**The playbook owns the BOX only.** To make a *client-side* agent (the user's laptop
+Claude Code / Codex, Hermes Desktop, etc.) share that same memory, wire it in
+**shared mode** — point it at the box's served API and reuse the same `bankId` so the
+box stays the **single source of truth** (never a local daemon/bank).
+
+Read `docs/memory.md` first. Core rule: set `hindsightApiUrl` to the served URL and
+`bankId` to the profile name (e.g. `ilterugur`). With `hindsightApiUrl` set, the
+plugin is external-only and can NEVER fall back to a local store. No LLM key is needed
+client-side (the box does extraction). Confirm the client is on the tailnet and can
+reach the URL (`curl .../health`).
+
+**Per-agent wiring:**
+
+- **Claude Code (CLI on PATH):** clone the marketplace LOCALLY first (Claude Code
+  ≥2.1's `plugin marketplace add <owner/repo>` network clone is buggy —
+  `ERR_STREAM_PREMATURE_CLOSE` — even though plain `git clone` works), then add by path:
+  `git clone --depth 1 https://github.com/vectorize-io/hindsight.git ~/.claude/plugins/marketplaces/hindsight`,
+  `claude plugin marketplace add ~/.claude/plugins/marketplaces/hindsight`,
+  `claude plugin install hindsight-memory`. Then write `~/.hindsight/claude-code.json`:
+  `{"hindsightApiUrl":"https://<node>.<tailnet>.ts.net:<serve_port>","bankId":"<profile>","dynamicBankId":false,"autoRecall":true,"autoRetain":true,"enableKnowledgeTools":true,"retainTags":["source:claude-code","profile:<profile>"]}`.
+
+- **Claude Code (desktop app):** it runs Claude Code in a Linux VM, so the `claude`
+  binary isn't host-runnable — but it READS host `~/.claude`. Register the plugin by
+  hand: add a `hindsight` entry to `~/.claude/plugins/known_marketplaces.json` and a
+  `hindsight-memory@hindsight` entry to `~/.claude/plugins/installed_plugins.json`
+  (mirror an existing custom-marketplace entry; `installPath` →
+  `~/.claude/plugins/cache/hindsight/hindsight-memory/<ver>` with the plugin files
+  copied there), set `enabledPlugins."hindsight-memory@hindsight": true` +
+  `extraKnownMarketplaces.hindsight` in `~/.claude/settings.json`, and write the same
+  `~/.hindsight/claude-code.json` as above. BACK UP each JSON first; takes effect next
+  session.
+
+- **Codex (CLI/desktop fork with the plugin system):** the OFFICIAL Hindsight Codex
+  installer (`curl …/get-codex | bash`) writes a global `~/.codex/hooks.json` +
+  `codex_hooks` — a customized Codex fork (e.g. codex-cli 0.13x) IGNORES global
+  hooks.json and only runs PLUGIN hooks (`plugin_hooks` feature). So package the
+  official codex scripts (`hindsight-integrations/codex/scripts`) as a LOCAL Codex
+  plugin: a marketplace dir + a plugin with `.claude-plugin/plugin.json` and
+  `hooks/hooks.codex.json` (SessionStart/UserPromptSubmit/Stop →
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/*.py"`), then `codex plugin marketplace add
+  <dir>` + `codex plugin add hindsight-memory@<marketplace>`. Write `~/.hindsight/codex.json`
+  (same shared keys, `retainTags` source:codex). The user must approve the one-time
+  **hook-trust** prompt on the next Codex session. (For a STANDARD Codex CLI, just run
+  the official installer and set `~/.hindsight/codex.json` — no plugin needed.)
+
+- **Hermes Agent:** `hermes memory setup hindsight` → mode **`local_external`**,
+  api_url `http://127.0.0.1:9077` (if Hermes runs ON the box) or the served URL
+  (remote), bank the profile name. NEVER cloud/local_embedded if you want the shared
+  box bank. Hermes Desktop in remote-backend mode uses the server's config — no
+  client-side Hermes setup needed.
+
+**Safety:** never run `codex exec --dangerously-bypass-approvals-and-sandbox` inside a
+repo to "test" hooks — the agent can edit/commit files unprompted. Test with a
+disposable cwd, and clean up any test memories via the control plane.
+
 ## Secrets & safety (non-negotiable)
 
 - `inventory.ini` and `group_vars/all.yml` hold the Tailscale key and other secrets
