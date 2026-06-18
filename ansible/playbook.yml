@@ -76,6 +76,12 @@
     # ON BY DEFAULT (set browser_automation: false to skip): headless Chrome +
     # Playwright MCP per profile.
     - { role: browser, tags: [browser], when: "browser_automation | default(true)" }
+    # ON BY DEFAULT (set hindsight_enabled: false to skip): Vectorize Hindsight
+    # long-term agent memory wired into Claude Code per profile. ONE profile-wide
+    # bank (cross-project, personal-assistant style) with auto-tags for later
+    # filtering. Local daemon (uvx hindsight-embed, port 9077); only LLM calls leave
+    # the box.
+    - { role: hindsight, tags: [hindsight], when: "hindsight_enabled | default(true)" }
     # OPT-IN cleanup. `never` keeps it OUT of normal runs entirely — it only runs
     # when you explicitly ask: `ansible-playbook playbook.yml --tags prune`.
     - { role: prune, tags: [prune, never] }

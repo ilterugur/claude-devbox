@@ -1,0 +1,11 @@
+---
+# On by default (hindsight_enabled: true; set false to skip). Per profile: install
+# the Vectorize Hindsight Claude Code plugin, configure a SINGLE profile-wide memory
+# bank (personal-assistant style — remembers you across all projects), disable the
+# plugin's own auto-retain, and install a custom Stop hook that retains WITH verti-
+# style tags (source/profile/project) so memories can be filtered later. Generic LLM
+# provider via the HINDSIGHT_API_LLM_* env file. Embeddings are local (daemon default).
+
+- name: Hindsight role placeholder (replaced in later tasks)
+  ansible.builtin.debug:
+    msg: "hindsight role: {{ profiles | map(attribute='user') | join(', ') }}"
