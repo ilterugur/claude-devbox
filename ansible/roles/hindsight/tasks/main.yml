@@ -38,3 +38,17 @@
   loop: "{{ profiles }}"
   loop_control:
     label: "{{ item.user }}"
+
+- name: Source the Hindsight env file from each profile's interactive shell
+  ansible.builtin.blockinfile:
+    path: "/home/{{ item.user }}/.bashrc"
+    create: true
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (claude-devbox hindsight)"
+    block: |
+      [ -f "$HOME/.hindsight/llm.env" ] && set -a && . "$HOME/.hindsight/llm.env" && set +a
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
