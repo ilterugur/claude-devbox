@@ -1,0 +1,2 @@
+/swapfile  file       8589934592          0  -1
+/dev/zram0 partition  4080218112 3037822976 100
