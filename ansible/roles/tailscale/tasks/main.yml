@@ -17,12 +17,20 @@
   failed_when: false
 
 - name: Bring Tailscale up (only if not already Running)
+  # No --ssh: we deliberately leave inbound tailnet :22 to the hardened OpenSSH
+  # (key-only, root disabled). Tailscale SSH would intercept :22 and gate it on
+  # the tailnet ACL, which has no ssh grant for this node — breaking the mosh /
+  # plain-ssh / et access model. Real sshd works over both tailnet and public IP.
   ansible.builtin.command:
     cmd: >-
-      tailscale up --ssh --authkey {{ tailscale_authkey }}
+      tailscale up --authkey {{ tailscale_authkey }}
       --hostname {{ inventory_hostname }}
   when: >-
     ts_status.rc != 0
     or (ts_status.stdout | from_json).BackendState | default('') != 'Running'
   changed_when: true
   no_log: true
+
+- name: Ensure Tailscale SSH interception stays disabled
+  ansible.builtin.command: tailscale set --ssh=false
+  changed_when: false
