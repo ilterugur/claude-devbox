@@ -38,7 +38,7 @@ export async function collect(opts: CollectOpts): Promise<Health> {
   const wtRaw = await sh([
     "sh",
     "-c",
-    `for d in ${opts.profileHome}/projects/*/; do git -C "$d" worktree list --porcelain 2>/dev/null; done`,
+    `for d in ${opts.profileHome}/projects/*/; do git -C "$d" -c safe.directory='*' worktree list --porcelain 2>/dev/null; done`,
   ]);
   const worktrees = parseWorktrees(wtRaw);
 
