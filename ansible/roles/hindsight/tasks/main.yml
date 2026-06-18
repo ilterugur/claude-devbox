@@ -27,6 +27,7 @@
   loop: "{{ profiles }}"
   loop_control:
     label: "{{ item.user }}"
+    index_var: idx
 
 - name: Write the Hindsight Claude Code bank config per profile
   ansible.builtin.template:
