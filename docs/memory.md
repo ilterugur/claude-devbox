@@ -76,17 +76,24 @@ If you want to query or browse the memory daemon from another machine on your
 
 ```yaml
 hindsight_expose_tailscale: true
-hindsight_expose_base_port: 19077   # default; external port = expose_base + index
+hindsight_serve_https_port: 9443    # default; HTTPS port = serve_port + index
 ```
 
-When enabled, provisioning creates a **socat proxy** per profile that forwards
-`0.0.0.0:(expose_base + index)` to the local daemon, and adds a **UFW rule
-scoped to `tailscale0`** so only traffic arriving via the Tailscale interface
-is accepted. The daemon itself is never bound to a public interface.
+When enabled, provisioning publishes each profile's loopback daemon through
+**Tailscale Serve**:
+
+```
+https://<node>.<tailnet>.ts.net:(serve_port + index)  ->  127.0.0.1:(base + index)
+```
+
+so it's reachable over your tailnet **by hostname with a valid TLS cert**
+(e.g. `https://devbox.tail1234.ts.net:9443`). Tailscale Serve is tailnet-gated by
+Tailscale itself — the daemon stays bound to `127.0.0.1` and nothing is opened on
+a public interface (no `0.0.0.0` bind, no firewall rule needed).
 
 Access is therefore **tailnet-only** — it relies on the user's Tailscale ACLs
 for fine-grained control. The daemon itself has no authentication layer;
-security comes entirely from the `tailscale0` UFW scope and your ACL policy.
+security comes entirely from Tailscale Serve's tailnet gating and your ACL policy.
 
 This option is **off by default** (`hindsight_expose_tailscale: false`).
 

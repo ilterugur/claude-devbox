@@ -151,12 +151,13 @@ hindsight_llm_base_url: "" # optional custom OpenAI-compatible endpoint ("" = pr
 #  Base port for the per-profile local daemon (loopback). Each profile gets base+index
 #  (9077, 9078, …) so multiple profiles don't collide. Single profile stays on 9077.
 # hindsight_base_port: 9077
-#  Expose the per-profile Hindsight daemon to your TAILNET (never public): a socat
-#  proxy per profile on 0.0.0.0:(expose_base+index), UFW-scoped to tailscale0 only.
-#  Lets you query/browse memory from your client over Tailscale. Auth is tailnet-only
-#  (the daemon has none — rely on your Tailscale ACLs). Default off (loopback only).
+#  Expose the per-profile Hindsight daemon to your TAILNET (never public) via Tailscale
+#  Serve: https://<node>.<tailnet>.ts.net:(serve_port+index) -> 127.0.0.1:(base+index).
+#  Reachable over your tailnet by hostname with a valid TLS cert; tailnet-gated by
+#  Tailscale itself (no public exposure, no UFW rule). Auth is tailnet-only (the daemon
+#  has none — rely on your Tailscale ACLs). Default off (loopback only).
 # hindsight_expose_tailscale: false
-# hindsight_expose_base_port: 19077   # external (tailnet) base port; profile gets base+index
+# hindsight_serve_https_port: 9443   # Tailscale Serve HTTPS port; profile gets port+index
 #  Escape hatch: true = isolated per-project banks instead of one tagged profile bank.
 #  Default false (profile-wide + tags) — per-project fragments personal-assistant memory.
 # hindsight_per_project: false

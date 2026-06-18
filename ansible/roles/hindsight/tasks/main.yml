@@ -139,47 +139,75 @@
   changed_when: false
 
 # ── Optional Tailscale-only exposure (hindsight_expose_tailscale) ──────────────
-- name: Install socat for the Hindsight tailnet proxy
-  ansible.builtin.apt:
-    name: socat
-    state: present
-    update_cache: true
-  when: hindsight_expose_tailscale | default(false)
+# Exposes each profile's loopback daemon to your TAILNET only (never public) via
+# Tailscale Serve: https://<node>.<tailnet>.ts.net:<serve_port> -> 127.0.0.1:<daemon>.
+# Tailnet-gated by Tailscale itself (no 0.0.0.0 bind, no UFW rule), with a valid TLS
+# cert and a real hostname — the same mechanism used for other devbox web apps.
 
-- name: Render a per-profile Hindsight proxy unit (tailnet only)
-  ansible.builtin.template:
-    src: hindsight-proxy.service.j2
-    dest: "/etc/systemd/system/hindsight-proxy-{{ item.user }}.service"
-    owner: root
-    group: root
-    mode: "0644"
-  loop: "{{ profiles }}"
-  loop_control:
-    label: "{{ item.user }}"
-    index_var: idx
-  when: hindsight_expose_tailscale | default(false)
-
-- name: Enable and start each Hindsight proxy (tailnet only)
+# Legacy cleanup: earlier versions exposed via a socat proxy + UFW. Remove it so a box
+# provisioned before this change converges. Idempotent — no-ops if it was never there.
+- name: Remove the legacy Hindsight socat proxy service (superseded by Tailscale Serve)
   ansible.builtin.systemd_service:
     name: "hindsight-proxy-{{ item.user }}.service"
-    enabled: true
-    state: started
-    daemon_reload: true
+    state: stopped
+    enabled: false
   loop: "{{ profiles }}"
   loop_control:
     label: "{{ item.user }}"
-  when: hindsight_expose_tailscale | default(false)
+  failed_when: false
 
-- name: Allow the Hindsight proxy port over Tailscale only (per profile)
+- name: Remove the legacy Hindsight socat unit file
+  ansible.builtin.file:
+    path: "/etc/systemd/system/hindsight-proxy-{{ item.user }}.service"
+    state: absent
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  notify: Reload systemd
+
+- name: Remove the legacy Hindsight socat UFW rule
   community.general.ufw:
     rule: allow
     direction: in
     interface: tailscale0
     proto: tcp
     port: "{{ (hindsight_expose_base_port | default(19077)) + idx }}"
-    comment: "hindsight memory proxy ({{ item.user }}) over tailscale"
+    delete: true
   loop: "{{ profiles }}"
   loop_control:
     label: "{{ item.user }}"
     index_var: idx
-  when: hindsight_expose_tailscale | default(false)
+  failed_when: false
+
+- name: Read current Tailscale Serve config
+  ansible.builtin.command: tailscale serve status
+  register: hs_serve_status
+  changed_when: false
+  failed_when: false
+
+- name: Expose each profile's Hindsight daemon via Tailscale Serve (tailnet only)
+  ansible.builtin.command:
+    cmd: >-
+      tailscale serve --bg
+      --https={{ (hindsight_serve_https_port | default(9443)) + idx }}
+      http://127.0.0.1:{{ (hindsight_base_port | default(9077)) + idx }}
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when:
+    - hindsight_expose_tailscale | default(false)
+    - (':' ~ ((hindsight_serve_https_port | default(9443)) + idx)) not in (hs_serve_status.stdout | default(''))
+  changed_when: true
+
+- name: Disable Tailscale Serve for Hindsight when exposure is off
+  ansible.builtin.command:
+    cmd: "tailscale serve --https={{ (hindsight_serve_https_port | default(9443)) + idx }} off"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when:
+    - not (hindsight_expose_tailscale | default(false))
+    - (':' ~ ((hindsight_serve_https_port | default(9443)) + idx)) in (hs_serve_status.stdout | default(''))
+  changed_when: true
