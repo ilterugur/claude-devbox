@@ -72,7 +72,9 @@
   loop_control:
     label: "{{ item.user }}"
   register: hs_marketplace
-  changed_when: "'already' not in (hs_marketplace.stdout | default('') | lower)"
+  changed_when: >-
+    'already' not in (hs_marketplace.stdout | default('') | lower)
+    and 'already' not in (hs_marketplace.stderr | default('') | lower)
   failed_when:
     - hs_marketplace.rc != 0
     - "'already' not in (hs_marketplace.stderr | default('') | lower)"
@@ -87,7 +89,9 @@
   loop_control:
     label: "{{ item.user }}"
   register: hs_install
-  changed_when: "'already' not in (hs_install.stdout | default('') | lower)"
+  changed_when: >-
+    'already' not in (hs_install.stdout | default('') | lower)
+    and 'already' not in (hs_install.stderr | default('') | lower)
   failed_when:
     - hs_install.rc != 0
     - "'already' not in (hs_install.stderr | default('') | lower)"
