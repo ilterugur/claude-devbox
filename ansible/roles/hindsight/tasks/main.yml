@@ -40,6 +40,30 @@
   loop_control:
     label: "{{ item.user }}"
 
+# retainMission/bankMission ride in claude-code.json (the plugin applies them to the
+# bank on first retain). observations_mission is NOT a plugin config key, so set it
+# directly on the bank via the daemon's HTTP API. Best-effort: the daemon isn't running
+# at provision time, so this no-ops then and converges on any later run while a session
+# (and thus the daemon) is up. Skipped in per-project mode (each project = its own bank).
+- name: Apply the bank observations_mission via the Hindsight daemon (best-effort)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ (hindsight_base_port | default(9077)) + idx }}/v1/default/banks/{{ item.user }}/config"
+    method: PATCH
+    body_format: json
+    body:
+      updates:
+        observations_mission: "{{ hindsight_observations_mission }}"
+    status_code: [200, 201]
+    timeout: 15
+  become_user: "{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when: not (hindsight_per_project | default(false))
+  failed_when: false
+  changed_when: false
+
 - name: Source the Hindsight env file from each profile's interactive shell
   ansible.builtin.blockinfile:
     path: "/home/{{ item.user }}/.bashrc"

@@ -185,6 +185,33 @@ If `uv` is absent the role will error during provisioning with a clear message.
 
 ---
 
+## Tuning what gets remembered
+
+By default the bank's missions are tightened to remember **important, durable things,
+not everything** — they keep the user's preferences/conventions, project architecture,
+final configuration state, and decisions (with rationale), and drop the dominant noise:
+**skill/framework documentation** (brainstorming/plan/worktree/TDD/model-selection text
+that gets injected into agent prompts and otherwise memorized + duplicated), git/commit/
+branch/test/task-progress logs, transient errors, and per-session summaries.
+
+These live in the role's `defaults/main.yml` and are overridable in `group_vars/all.yml`:
+
+| Var | Applied via | Purpose |
+|-----|-------------|---------|
+| `hindsight_retain_mission` | `claude-code.json` (`retainMission`) — plugin sets it on first retain | what the extractor pulls from each conversation |
+| `hindsight_bank_mission` | `claude-code.json` (`bankMission`) → bank `reflect_mission` | the bank's persona when surfacing memory |
+| `hindsight_observations_mission` | daemon HTTP API (`PATCH …/config`), best-effort task | what consolidation turns into long-term observations; also enforces "one canonical fact" to fight TR/EN duplicate paraphrases |
+| `hindsight_retain_every_n_turns` | `claude-code.json` (`retainEveryNTurns`) | how often a session flushes a retain (higher = fewer, less noisy writes) |
+
+`observations_mission` isn't a plugin config key, so the role sets it directly on the
+bank via the daemon API — a **best-effort** task that no-ops when the daemon is down
+(provision time) and converges on any later run while a session is up. Hermes/Codex
+clients have their own retain frequency; the **bank missions apply centrally** to every
+client writing to the shared bank. Changing a mission affects **future** retains only —
+existing memory stays until you prune or reset the bank.
+
+---
+
 ## Verifying / troubleshooting
 
 After provisioning, confirm the plugin is active for each profile:

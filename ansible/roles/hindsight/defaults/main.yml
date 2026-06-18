@@ -1,0 +1,50 @@
+---
+# ── Bank-level memory tuning (see docs/memory.md) ─────────────────────────────
+# Keeps memory focused on "important, durable things" instead of "everything".
+# retainMission/bankMission are written into the per-profile claude-code.json and
+# applied to the shared bank by the plugin on first retain. observations_mission is
+# applied best-effort via the daemon's HTTP API (the plugin doesn't manage it) — it
+# takes effect whenever the daemon is reachable during a run. Override any of these
+# in group_vars/all.yml.
+
+# How often a Claude Code session flushes a retain (higher = fewer, less noisy writes).
+hindsight_retain_every_n_turns: 4
+
+# reflect_mission — the bank's persona used when surfacing/reflecting on memory.
+hindsight_bank_mission: >-
+  You are the long-term memory of a personal coding assistant for one user. Surface
+  durable, user-specific knowledge — the user's preferences and conventions, their
+  projects' architecture and configuration, and decisions they made — and ignore
+  transient operational detail.
+
+# retain_mission — what the extractor pulls from each conversation.
+hindsight_retain_mission: >-
+  You are curating a long-term personal memory for one user across their projects.
+  Extract ONLY durable, user-specific knowledge that will still matter weeks from now:
+  (a) the user's own preferences, conventions, working style, and decisions — including
+  conventions they adopt about tools or workflows (e.g. 'keeps plan docs untracked',
+  'uses pnpm here'); (b) concrete stable facts about their specific systems — final
+  configuration and infrastructure state, project architecture, and the key technical
+  decisions they made together with their rationale (even when the rationale references
+  a past problem); (c) lasting context about the user, their projects, environment, and
+  recurring needs. Do NOT store: documentation or mechanics of skills, frameworks, tools,
+  methodologies, or workflows — even when the assistant is following them (how to
+  brainstorm, write plans, use git worktrees, run TDD, select models, generic process
+  steps or decision flows) — UNLESS the user adopts it as their own convention or states
+  a preference about it (then keep the user's choice, not the generic mechanics). Also
+  drop: commit hashes, branch names, merges, pushes, PR/issue numbers, repo state;
+  test/build/lint/verification results; task progress, completion logs, and one-time
+  approvals or option-selections such as 'chose Option A' (but if a selection encodes a
+  durable decision, keep that decision, not the label); transient errors, one-off
+  debugging state, the step-by-step of doing or configuring something, and per-session or
+  operational summaries; greetings and social exchange; and anything likely stale within
+  ~7 days.
+
+# observations_mission — what the consolidation layer turns into long-term observations.
+hindsight_observations_mission: >-
+  Consolidate into long-term observations only durable, user-specific facts: the user's
+  stable preferences and conventions, their projects' architecture and final
+  configuration, and the lasting decisions they made (with rationale). Never form
+  observations from skill/framework/tool documentation, git/test/task-progress logs,
+  transient errors, or session summaries. Keep one canonical observation per fact — do
+  not restate the same fact in multiple phrasings or languages.

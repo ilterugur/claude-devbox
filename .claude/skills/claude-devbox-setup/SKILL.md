@@ -241,6 +241,14 @@ reach the URL (`curl .../health`).
   box bank. Hermes Desktop in remote-backend mode uses the server's config — no
   client-side Hermes setup needed.
 
+**Bank tuning (shared across all clients):** the bank's missions are tightened to keep
+durable, user-specific knowledge and drop noise (skill/framework docs, git/test/task
+logs, transient detail) — set centrally in the role's `defaults/main.yml`
+(`hindsight_retain_mission` / `_bank_mission` / `_observations_mission` /
+`_retain_every_n_turns`). See `docs/memory.md` → "Tuning what gets remembered". To
+(re)apply on a fresh/reset bank, run `--tags hindsight` while the daemon is up, or
+`PATCH http://127.0.0.1:9077/v1/default/banks/<profile>/config` with the missions.
+
 **Safety:** never run `codex exec --dangerously-bypass-approvals-and-sandbox` inside a
 repo to "test" hooks — the agent can edit/commit files unprompted. Test with a
 disposable cwd, and clean up any test memories via the control plane.

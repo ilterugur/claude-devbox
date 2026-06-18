@@ -10,5 +10,8 @@
 {% endif %}
   "autoRecall": true,
   "enableKnowledgeTools": true,
+  "retainEveryNTurns": {{ hindsight_retain_every_n_turns | default(4) }},
+  "retainMission": {{ hindsight_retain_mission | to_json }},
+  "bankMission": {{ hindsight_bank_mission | to_json }},
   "hindsightApiUrl": ""
 }
