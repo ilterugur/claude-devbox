@@ -43,6 +43,55 @@ local mode is the only one used.
 
 ---
 
+## Networking & access
+
+By default the daemon is **loopback-only** (`127.0.0.1`). It is reachable only
+by the agent process running on the same box — not reachable from the network,
+not exposed on Tailscale, not public in any way.
+
+### Per-profile ports (`hindsight_base_port`)
+
+Each profile gets its own daemon instance. To avoid port collisions when
+multiple profiles coexist on one box, ports are allocated as
+`base + profile_index`:
+
+| Profile index | Default port |
+| ------------- | ------------ |
+| 0 (first)     | 9077         |
+| 1 (second)    | 9078         |
+| …             | …            |
+
+The base is controlled by:
+
+```yaml
+hindsight_base_port: 9077   # default
+```
+
+A single-profile setup simply stays on `9077` and never notices the scheme.
+
+### Optional Tailscale exposure (`hindsight_expose_tailscale`)
+
+If you want to query or browse the memory daemon from another machine on your
+**tailnet** (e.g. your laptop browsing memory from the devbox), set:
+
+```yaml
+hindsight_expose_tailscale: true
+hindsight_expose_base_port: 19077   # default; external port = expose_base + index
+```
+
+When enabled, provisioning creates a **socat proxy** per profile that forwards
+`0.0.0.0:(expose_base + index)` to the local daemon, and adds a **UFW rule
+scoped to `tailscale0`** so only traffic arriving via the Tailscale interface
+is accepted. The daemon itself is never bound to a public interface.
+
+Access is therefore **tailnet-only** — it relies on the user's Tailscale ACLs
+for fine-grained control. The daemon itself has no authentication layer;
+security comes entirely from the `tailscale0` UFW scope and your ACL policy.
+
+This option is **off by default** (`hindsight_expose_tailscale: false`).
+
+---
+
 ## Memory model
 
 Each profile gets **one profile-wide memory bank** (the `bankId` is the profile's
