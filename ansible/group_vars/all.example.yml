@@ -110,7 +110,17 @@ browser_automation: true
 #  alive on the box across reconnects — the resilient alternative to Claude
 #  Desktop's integrated SSH remote (which drops the session on disconnect). Connect
 #  with: mosh <user>@<tailscale-name> -- tmux new -A -s main  (then run `claude`).
+#  NOTE: mosh's predictive echo can drop/garble keystrokes on some macOS clients (a
+#  known, unfixed mosh issue) — if you hit that, set mosh_enabled: false and use
+#  Eternal Terminal (et_enabled) below instead. The `devbox` CLI auto-prefers et.
 mosh_enabled: true
+
+# ── Eternal Terminal (et) — TCP auto-reconnecting shell (OPT-IN) ──────────────
+#  Same roaming + tmux persistence as mosh, but TCP and WITHOUT predictive echo, so
+#  keystrokes stay clean (no drops) — the fix when mosh misbehaves on macOS. Installs
+#  etserver from its PPA and opens TCP 2022 on the tailscale0 interface only. The
+#  `devbox` CLI uses `et` automatically when it's installed locally (brew install et).
+# et_enabled: true
 
 #  UTF-8 locale(s) to generate on the box (mosh-server adopts the client's locale).
 #  The `devbox` connect command pins LC_ALL to the FIRST entry client-side, so a

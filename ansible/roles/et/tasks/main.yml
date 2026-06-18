@@ -1,0 +1,59 @@
+---
+# Eternal Terminal (et) — a TCP, auto-reconnecting remote shell. Same win as mosh
+# (survives network drops / IP roaming / laptop sleep, with tmux keeping the session
+# and the `claude` in it alive), but WITHOUT mosh's predictive-echo layer — which on
+# macOS clients is a known, unfixed source of dropped/garbled keystrokes
+# (zellij-org/zellij#3717, mobile-shell/mosh#234). ET is TCP, so it stays clean even
+# over a relayed Tailscale path, and integrates with tmux. On by default once enabled
+# via et_enabled; pairs with the existing tmux install (the Remote Control service).
+#
+# ET isn't in Ubuntu's repos; it ships via the jgmath2000/et PPA. We add that PPA by
+# hand (deb822 + a keyring) rather than via `ppa:` so we can pin the suite: the PPA has
+# no build for very new Ubuntu (e.g. 26.04 resolute), so fall back to the newest suite
+# it does build for. `et_ppa_suite` overrides this if a matching build appears later.
+
+- name: Ensure the apt keyrings dir exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Fetch the Eternal Terminal PPA signing key
+  ansible.builtin.get_url:
+    url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xD3614CB0B3C2D154356BD436CB4ADEA5B72A07A1"
+    dest: /etc/apt/keyrings/eternalterminal.asc
+    mode: "0644"
+
+- name: Add the Eternal Terminal apt source (suite pinned — PPA lacks a build for the newest Ubuntu)
+  ansible.builtin.deb822_repository:
+    name: eternalterminal
+    types: deb
+    uris: "https://ppa.launchpadcontent.net/jgmath2000/et/ubuntu"
+    suites: "{{ et_ppa_suite | default('questing') }}"
+    components: main
+    signed_by: /etc/apt/keyrings/eternalterminal.asc
+    state: present
+
+- name: Install Eternal Terminal (etserver + et client)
+  ansible.builtin.apt:
+    name: et
+    state: present
+    update_cache: true
+
+- name: Enable and start the etserver service
+  ansible.builtin.systemd_service:
+    name: et
+    enabled: true
+    state: started
+
+- name: Allow Eternal Terminal (TCP 2022) over Tailscale
+  # Scoped to the tailscale0 interface so etserver is reachable only from your tailnet,
+  # never the public internet — connect to the box's Tailscale address. ET bootstraps
+  # over ssh (already open) then carries the session on this TCP port.
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: tailscale0
+    proto: tcp
+    port: "2022"
+    comment: eternal terminal over tailscale

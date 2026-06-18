@@ -183,23 +183,25 @@ cli
   .option("-p, --profile <profile>", "use this profile for this call only")
   .option("-m, --menu", "force the picker (skip git auto-open)")
   .option("-s, --shell", "open a plain shell (skip the auto-launch)")
-  .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean }) => {
+  .option("--ssh", "connect over plain ssh+tmux, skipping et/mosh (also: DEVBOX_NO_MOSH=1)")
+  .action(async (project: string | undefined, opts: { profile?: string; menu?: boolean; shell?: boolean; ssh?: boolean }) => {
     const prof = resolveProfile(cfg, opts.profile);
+    const co = { shellOnly: !!opts.shell, noMosh: !!opts.ssh };
     if (lazyMountOnConnect(cfg, prof) && lazyMountsFor(cfg, prof).length) {
       try { runMountUp(cfg, prof); } catch (e) { process.stderr.write(`devbox: lazy mount skipped: ${(e as Error).message}\n`); }
     }
-    if (project) return connect(cfg, prof, project, { shellOnly: !!opts.shell });
+    if (project) return connect(cfg, prof, project, co);
     if (!opts.menu) {
       const m = gitMatch(cfg);
-      if (m.length) return connect(cfg, m[0].profile, m[0].project, { shellOnly: !!opts.shell });
+      if (m.length) return connect(cfg, m[0].profile, m[0].project, co);
     }
     const profilesList = cfg.profiles.map((p) => ({ user: p.user, projects: projectsOf(cfg, p.user) }));
     const { profile, result } = await pickUI(profilesList, prof);
     if (result === null) return; // cancelled
     if (profile !== prof) writeState(profile); // persist an in-picker profile switch
-    if (result === "__home__") return connect(cfg, profile, null, { shellOnly: !!opts.shell });
+    if (result === "__home__") return connect(cfg, profile, null, co);
     if (result === "__new__") return newHelp(profile);
-    return connect(cfg, profile, result, { shellOnly: !!opts.shell });
+    return connect(cfg, profile, result, co);
   });
 
 cli.help();

@@ -57,6 +57,11 @@
     # terminal sessions (survives network drops; pair with tmux). After tailscale so
     # its UFW rule can scope to the tailscale0 interface.
     - { role: mosh, tags: [mosh], when: "mosh_enabled | default(true)" }
+    # OPT-IN (et_enabled: true): Eternal Terminal — a TCP, auto-reconnecting remote
+    # shell. Same roaming/persistence win as mosh but without mosh's predictive-echo
+    # layer, which on macOS clients drops/garbles keystrokes. After tailscale so its
+    # UFW rule can scope to tailscale0.
+    - { role: et, tags: [et], when: "et_enabled | default(false)" }
     - { role: docker, tags: [docker] }
     - { role: runtime, tags: [runtime, mise] }
     - { role: users, tags: [users, profiles] }

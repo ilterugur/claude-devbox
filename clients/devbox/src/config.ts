@@ -165,7 +165,7 @@ export function connect(
   cfg: Config,
   prof: string,
   project: string | null,
-  opts: { shellOnly?: boolean; launch?: string; dir?: string } = {},
+  opts: { shellOnly?: boolean; launch?: string; dir?: string; noMosh?: boolean } = {},
 ) {
   const sess = project || "main"; // treat "" like null (an empty tmux -s name is rejected)
   const dir = opts.dir ?? (project ? `/home/${prof}/projects/${project}` : `/home/${prof}`);
@@ -188,11 +188,24 @@ export function connect(
   tmux.push(";", "set", "-g", "mouse", "off");
   tmux.push(";", "set", "status", "off");
 
-  const useMosh = Bun.which("mosh") != null;
-  // mosh forwards argv after `--` intact (no shell) — clean. ssh joins args into one
-  // remote string, so build a properly-quoted string for it.
-  const cmd = useMosh ? "mosh" : "ssh";
-  const args = useMosh ? [host, "--", ...tmux] : ["-t", host, tmux.map(shQuote).join(" ")];
+  // Transport precedence: et > mosh > ssh. All three attach the SAME box-side tmux
+  // session, so they're interchangeable per-connect.
+  //   et (Eternal Terminal): TCP, auto-reconnect/roaming like mosh but no predictive
+  //     echo — the fix for mosh dropping/garbling keystrokes on macOS. Preferred when
+  //     installed locally (brew install et) and the box runs etserver (et_enabled).
+  //   mosh: roaming over UDP, but predictive echo misbehaves on some macOS clients.
+  //   ssh: plain; tmux still gives persistence, just no roaming/auto-reconnect.
+  // `--ssh` / DEVBOX_NO_MOSH=1 forces plain ssh (skips both et and mosh).
+  const forceSsh = opts.noMosh || process.env.DEVBOX_NO_MOSH != null;
+  const useEt = !forceSsh && Bun.which("et") != null;
+  const useMosh = !forceSsh && !useEt && Bun.which("mosh") != null;
+  // mosh forwards argv after `--` intact (no shell). et and ssh take one shell-parsed
+  // command string on the box, so build a properly-quoted string for them.
+  const remote = tmux.map(shQuote).join(" ");
+  let cmd: string, args: string[];
+  if (useEt) { cmd = "et"; args = [host, "-c", remote]; }
+  else if (useMosh) { cmd = "mosh"; args = [host, "--", ...tmux]; }
+  else { cmd = "ssh"; args = ["-t", host, remote]; }
 
   if (process.env.DEVBOX_DRYRUN) {
     process.stdout.write(JSON.stringify([cmd, ...args]) + "\n");
