@@ -141,13 +141,24 @@ browser_automation: true
 #  source/profile/project so you can filter it later via the agent_knowledge_* tools.
 #  Requires `uv` in runtimes (the daemon runs via uvx). READ docs/memory.md.
 hindsight_enabled: true
-#  LLM provider for memory extraction/recall — generic, any Hindsight-supported
-#  provider (openai | anthropic | gemini | groq | ollama | openrouter | ...), including
-#  a custom OpenAI-compatible endpoint via hindsight_llm_base_url.
+#  LLM provider for memory extraction/recall — generic, any Hindsight-supported provider
+#  (openai | anthropic | gemini | groq | ollama | openrouter | openai-codex | claude-code | ...),
+#  including a custom OpenAI-compatible endpoint via hindsight_llm_base_url.
+#  Pick ONE block below. Keep the real secret in all.yml (gitignored) — never in this file.
+#
+#  ── OpenRouter (selected) — generic, OpenAI-compatible; needs an API key ──────
 hindsight_llm_provider: "openrouter"
-hindsight_llm_api_key: "REPLACE_ME" # required, except keyless providers (ollama/local)
-hindsight_llm_model: "openai/gpt-oss-20b" # any model the provider serves ("" = provider default)
-hindsight_llm_base_url: "" # optional custom OpenAI-compatible endpoint ("" = provider default)
+hindsight_llm_api_key: "REPLACE_ME"        # put the real sk-or-... key in all.yml ONLY
+hindsight_llm_model: "openai/gpt-oss-20b"  # any model the provider serves ("" = provider default)
+hindsight_llm_base_url: ""                  # optional custom OpenAI-compatible endpoint
+#
+#  ── OpenAI Codex (alternative, keyless) — uses the box's Codex / ChatGPT OAuth, so memory
+#     extraction costs nothing on OpenRouter. Requires a logged-in Codex session on the box
+#     (~/.codex/auth.json). To switch: comment the OpenRouter block above, uncomment this:
+# hindsight_llm_provider: "openai-codex"
+# hindsight_llm_api_key: ""                  # not needed — Codex uses its OAuth session
+# hindsight_llm_model: "gpt-5.4-mini"
+# hindsight_llm_base_url: ""
 #  Base port for the per-profile local daemon (loopback). Each profile gets base+index
 #  (9077, 9078, …) so multiple profiles don't collide. Single profile stays on 9077.
 # hindsight_base_port: 9077

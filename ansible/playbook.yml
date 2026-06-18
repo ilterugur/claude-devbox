@@ -52,11 +52,11 @@
           - >-
             (hindsight_llm_api_key | default('') | length > 0)
             or (hindsight_llm_base_url | default('') | length > 0)
-            or (hindsight_llm_provider | default('') | lower in ['ollama', 'local'])
+            or (hindsight_llm_provider | default('') | lower in ['ollama', 'local', 'openai-codex', 'claude-code'])
         fail_msg: >-
           hindsight_enabled is true but the LLM provider isn't configured. Set
           hindsight_llm_provider and either hindsight_llm_api_key, a custom
-          hindsight_llm_base_url, or a keyless provider (ollama/local). See
+          hindsight_llm_base_url, or a keyless provider (ollama/local/openai-codex/claude-code). See
           docs/memory.md. (Set hindsight_enabled: false to skip Hindsight.)
       when: hindsight_enabled | default(true) | bool
       tags: [always, hindsight]
