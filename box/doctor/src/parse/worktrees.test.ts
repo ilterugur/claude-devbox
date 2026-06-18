@@ -13,3 +13,11 @@ test("parseWorktrees extracts bridge worktrees with cse + locked", () => {
   expect(bridges[0].locked).toBe(true);
   expect(bridges[0].path).toContain("bridge-cse_01CVdoCP");
 });
+
+test("parseWorktrees treats `locked <reason>` as locked", () => {
+  const wts = parseWorktrees(
+    "worktree /home/u/projects/p/.claude/worktrees/bridge-cse_x\nbranch refs/heads/b\nlocked held by build\n",
+  );
+  expect(wts[0].locked).toBe(true);
+  expect(wts[0].cse).toBe("cse_x");
+});

@@ -64,3 +64,11 @@ test("isWorktreeProtected: a trailing slash on the worktree path still matches",
   const procs: ProcRef[] = [{ pid: 5, cmd: `bun build --cwd ${wt}/src` }];
   expect(isWorktreeProtected(wt + "/", procs)).toBe(true);
 });
+
+test("classifySession: live pid with unknown activity => active (conservative)", () => {
+  const s = classifySession(
+    { pid: 100, lastActivity: null },
+    { now: NOW, activityWindowSec: ACTIVITY_WINDOW, idleAfterSec: IDLE_AFTER },
+  );
+  expect(s).toBe("active");
+});

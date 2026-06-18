@@ -8,11 +8,16 @@ import { classifySession } from "./classify";
 import { detectConditions } from "./conditions";
 import type { Health, Session } from "./types";
 
-async function sh(cmd: string[]): Promise<string> {
+async function sh(cmd: string[], timeoutMs = 10_000): Promise<string> {
   const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
-  const out = await new Response(p.stdout).text();
-  await p.exited;
-  return out;
+  const timer = setTimeout(() => p.kill(), timeoutMs);
+  try {
+    const out = await new Response(p.stdout).text();
+    await p.exited;
+    return out;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export interface CollectOpts {
@@ -38,7 +43,7 @@ export async function collect(opts: CollectOpts): Promise<Health> {
   const wtRaw = await sh([
     "sh",
     "-c",
-    `for d in ${opts.profileHome}/projects/*/; do git -C "$d" -c safe.directory='*' worktree list --porcelain 2>/dev/null; done`,
+    `for d in "${opts.profileHome}"/projects/*/; do git -C "$d" -c safe.directory='*' worktree list --porcelain 2>/dev/null; done`,
   ]);
   const worktrees = parseWorktrees(wtRaw);
 
@@ -53,14 +58,15 @@ export async function collect(opts: CollectOpts): Promise<Health> {
     ),
   }));
 
+  const rcUnits = parseRcUnits(units);
   return {
     now,
     mem: parseMem(free),
     swap: parseSwap(swap),
     oom: parseOomEvents(dmesg),
-    units: parseRcUnits(units),
+    units: rcUnits,
     sessions,
     worktrees,
-    conditions: detectConditions({ units: parseRcUnits(units), worktrees, procs }),
+    conditions: detectConditions({ units: rcUnits, worktrees, procs }),
   };
 }

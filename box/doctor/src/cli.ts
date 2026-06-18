@@ -8,12 +8,19 @@ async function main() {
     process.exit(2);
   }
   const json = rest.includes("--json");
-  const health = await collect({
-    profileHome: process.env.HOME ?? "/root",
-    activityWindowSec: 10 * 60,
-    idleAfterSec: 30 * 60,
-  });
-  console.log(json ? formatJson(health) : formatHuman(health));
+  try {
+    const health = await collect({
+      profileHome: process.env.HOME ?? "/root",
+      activityWindowSec: 10 * 60,
+      idleAfterSec: 30 * 60,
+    });
+    console.log(json ? formatJson(health) : formatHuman(health));
+  } catch (err) {
+    console.error(
+      `doctor: failed to collect health: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
 }
 
 main();

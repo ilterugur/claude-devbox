@@ -21,7 +21,7 @@ export function parseWorktrees(porcelain: string): Worktree[] {
       cur = { path: line.slice("worktree ".length).trim(), locked: false };
     } else if (line.startsWith("branch ") && cur) {
       cur.branch = line.slice("branch ".length).trim();
-    } else if (line.trim() === "locked" && cur) {
+    } else if (line.trim().startsWith("locked") && cur) {
       cur.locked = true;
     }
   }

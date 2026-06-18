@@ -20,6 +20,9 @@ export function formatHuman(h: Health): string {
   for (const u of h.units) {
     lines.push(`RC   ${u.unit} ${u.active}/${u.sub}`);
   }
+  for (const s of h.sessions) {
+    lines.push(`SESS ${s.cse} ${s.state}${s.pid !== null ? ` (pid ${s.pid})` : ""}`);
+  }
   lines.push("");
   lines.push("CONDITIONS:");
   if (!h.conditions.length) lines.push("  (none)");

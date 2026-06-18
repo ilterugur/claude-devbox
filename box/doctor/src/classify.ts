@@ -11,7 +11,10 @@ export function classifySession(
   opts: ClassifyOpts,
 ): SessionState {
   if (s.pid === null) return "dead";
-  const age = s.lastActivity === null ? Infinity : opts.now - s.lastActivity;
+  // Live process but unknown last activity: treat as active (conservative —
+  // never mark a running session idle/dead and thus eligible for cleanup).
+  if (s.lastActivity === null) return "active";
+  const age = opts.now - s.lastActivity;
   if (age <= opts.activityWindowSec) return "active";
   if (age >= opts.idleAfterSec) return "idle";
   // Middle band (older than the activity window, younger than the idle
