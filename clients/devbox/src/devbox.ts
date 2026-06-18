@@ -171,13 +171,39 @@ cli
   });
 
 cli
-  .command("add [name]", "register the current git repo as a project for a profile (preview; --write edits all.yml)")
+  .command("add [name]", "register the current git repo as a project (+ Remote Control server) for a profile")
   .option("-p, --profile <profile>", "target profile (default: active)")
   .option("--branch <branch>", "branch to track (default: current branch)")
   .option("--write", "edit ansible/group_vars/all.yml in place (needs repoPath; never runs the playbook)")
-  .action((name: string | undefined, opts: { profile?: string; branch?: string; write?: boolean }) => {
-    runAdd(cfg, { name, profile: opts.profile, branch: opts.branch, write: !!opts.write });
-  });
+  .option("--no-server", "don't add an always-on Remote Control server (project only)")
+  .option("--server-name <title>", "Remote Control title shown in the phone app (default: titleized name)")
+  .option("--spawn <mode>", "Remote Control spawn mode: worktree | same-dir | session (default: worktree)")
+  .option("--capacity <n>", "Remote Control session capacity (default: 32)")
+  .action(
+    (
+      name: string | undefined,
+      opts: {
+        profile?: string;
+        branch?: string;
+        write?: boolean;
+        server?: boolean;
+        serverName?: string;
+        spawn?: string;
+        capacity?: string | number;
+      },
+    ) => {
+      runAdd(cfg, {
+        name,
+        profile: opts.profile,
+        branch: opts.branch,
+        write: !!opts.write,
+        server: opts.server,
+        serverName: opts.serverName,
+        spawn: opts.spawn,
+        capacity: opts.capacity == null ? undefined : Number(opts.capacity),
+      });
+    },
+  );
 
 cli
   .command("[project]", "connect — picker, or git-auto-open, when no project is given")

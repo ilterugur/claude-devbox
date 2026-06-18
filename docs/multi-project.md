@@ -67,10 +67,17 @@ Preview from your client — see [realtime-sync.md](realtime-sync.md).
 
 ## Adding a project or profile later
 
-Edit `all.yml`, re-run the playbook (idempotent + additive). A new profile creates
-the user + SSH key (add it to GitHub); a new `servers` entry brings up its
-`claude-rc-*` service (online once that profile is logged in). Existing repos aren't
-touched (`update: false`).
+**Easiest:** from inside the repo on your client, run `devbox add` (or the
+`/devbox-add-project` slash command). It detects the repo and inserts BOTH a
+`projects:` entry and an always-on Remote Control `servers:` entry into `all.yml`,
+then prints the playbook command (`--tags projects,remote`). Pass `--no-server` for
+a project with no phone-reachable RC service, or tune it with `--server-name`,
+`--spawn`, `--capacity`.
+
+**By hand:** edit `all.yml`, re-run the playbook (idempotent + additive). A new
+profile creates the user + SSH key (add it to GitHub); a new `servers` entry brings
+up its `claude-rc-*` service (online once that profile is logged in). Existing repos
+aren't touched (`update: false`).
 
 **Targeted re-runs** (faster, on an already-provisioned box) via tags:
 

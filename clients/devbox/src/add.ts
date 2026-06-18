@@ -2,9 +2,11 @@
  * add.ts — `devbox add`: register the current git repo as a claude-devbox project.
  *
  * Detects the project (origin remote → canonical SSH url, branch, name), targets a
- * profile, and either PREVIEWS the YAML snippet + the playbook command (default, and
+ * profile, and either PREVIEWS the YAML snippets + the playbook command (default, and
  * whenever DEVBOX_DRYRUN is set) or — with --write — does a comment-preserving textual
- * insert into ansible/group_vars/all.yml under that profile's `projects:`.
+ * insert into ansible/group_vars/all.yml under that profile's `projects:` AND (by
+ * default) an always-on Remote Control server under its `servers:` (pass --no-server
+ * to skip). The servers: block is created if the profile doesn't have one yet.
  *
  * It NEVER runs the playbook: that has remote side effects and needs the operator /
  * Tailscale secrets, which aren't present on every client. The `/<prefix>-add-project`
@@ -63,6 +65,79 @@ export function projectEntry(d: Detected): string {
   );
 }
 
+/** Human-friendly title from a repo name: "verti-monorepo" → "Verti Monorepo". */
+export function titleize(name: string): string {
+  return name
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+export type ServerOpts = { name?: string; spawn?: string; capacity?: number };
+
+/** The YAML block for one always-on Remote Control server, 6-space indented to sit
+ *  under a profile's `servers:`. References the project by name; `name` is the title
+ *  shown in the phone app. Defaults mirror the live config (worktree spawn, capacity 32). */
+export function serverEntry(projectName: string, opts: ServerOpts = {}): string {
+  const title = opts.name ?? titleize(projectName);
+  const spawn = opts.spawn ?? "worktree";
+  const capacity = opts.capacity ?? 32;
+  return (
+    `      - project: ${projectName}\n` +
+    `        name: "${title}" # title shown in the phone app\n` +
+    `        spawn: ${spawn} # worktree | same-dir | session\n` +
+    `        capacity: ${capacity}\n`
+  );
+}
+
+const cleaned = (s: string) => s.trim().replace(/^['"]|['"]$/g, "");
+
+/** [start, end) line range of the `- user: <user>` profile block, plus its list indent.
+ *  The block ends at the next `- user:` at the same indent (or EOF). Dies if absent. */
+function findProfile(lines: string[], user: string): { start: number; end: number; userIndent: number } {
+  let start = -1;
+  let userIndent = 2;
+  for (let j = 0; j < lines.length; j++) {
+    const m = lines[j].match(/^(\s*)-\s+user:\s*(.+?)\s*$/);
+    if (m && cleaned(m[2]) === user) {
+      start = j;
+      userIndent = m[1].length;
+      break;
+    }
+  }
+  if (start < 0) die(`profile "${user}" not found in group_vars/all.yml`);
+
+  let end = lines.length;
+  for (let j = start + 1; j < lines.length; j++) {
+    const m = lines[j].match(/^(\s*)-\s+user:/);
+    if (m && m[1].length === userIndent) {
+      end = j;
+      break;
+    }
+  }
+  return { start, end, userIndent };
+}
+
+/** Line index of a `key:` mapping at exactly keyIndent within [start, end), or -1. */
+function findKeyLine(lines: string[], start: number, end: number, keyIndent: number, key: string): number {
+  for (let j = start + 1; j < end; j++) {
+    if (new RegExp(`^\\s{${keyIndent}}${key}:\\s*$`).test(lines[j])) return j;
+  }
+  return -1;
+}
+
+/** Given the line index of a list-key (at keyIndent), return where its list ends:
+ *  the first non-blank in-block line indented <= keyIndent, or `end`. */
+function listEnd(lines: string[], keyLine: number, end: number, keyIndent: number): number {
+  for (let j = keyLine + 1; j < end; j++) {
+    if (lines[j].trim() === "") continue;
+    const ind = lines[j].match(/^(\s*)/)![1].length;
+    if (ind <= keyIndent) return j;
+  }
+  return end;
+}
+
 /**
  * Insert `snippet` at the end of `user`'s `projects:` list in an all.yml `content`,
  * preserving every other line (comments included). Refuses (via die) if the profile
@@ -71,51 +146,14 @@ export function projectEntry(d: Detected): string {
  */
 export function addProjectToYaml(content: string, user: string, snippet: string, name: string): string {
   const lines = content.split("\n");
-  const cleaned = (s: string) => s.trim().replace(/^['"]|['"]$/g, "");
-
-  // Locate the profile's `- user: <user>` list item.
-  let i = -1;
-  let userIndent = 2;
-  for (let j = 0; j < lines.length; j++) {
-    const m = lines[j].match(/^(\s*)-\s+user:\s*(.+?)\s*$/);
-    if (m && cleaned(m[2]) === user) {
-      i = j;
-      userIndent = m[1].length;
-      break;
-    }
-  }
-  if (i < 0) die(`profile "${user}" not found in group_vars/all.yml`);
-
-  // The profile block ends at the next `- user:` at the same indent (or EOF).
-  let end = lines.length;
-  for (let j = i + 1; j < lines.length; j++) {
-    const m = lines[j].match(/^(\s*)-\s+user:/);
-    if (m && m[1].length === userIndent) {
-      end = j;
-      break;
-    }
-  }
-
-  // `projects:` is a mapping key inside the list item (indent = userIndent + 2).
+  const { start, end, userIndent } = findProfile(lines, user);
   const keyIndent = userIndent + 2;
-  let pj = -1;
-  for (let j = i + 1; j < end; j++) {
-    if (new RegExp(`^\\s{${keyIndent}}projects:\\s*$`).test(lines[j])) {
-      pj = j;
-      break;
-    }
-  }
-  if (pj < 0) die(`profile "${user}" has no projects: block in group_vars/all.yml`);
 
-  // The projects list runs until the next line (in-block) indented <= keyIndent.
-  let pend = end;
-  for (let j = pj + 1; j < end; j++) {
-    if (lines[j].trim() === "") continue;
-    const ind = lines[j].match(/^(\s*)/)![1].length;
-    if (ind <= keyIndent) {
-      pend = j;
-      break;
-    }
+  const pj = findKeyLine(lines, start, end, keyIndent, "projects");
+  if (pj < 0) die(`profile "${user}" has no projects: block in group_vars/all.yml`);
+  const pend = listEnd(lines, pj, end, keyIndent);
+
+  for (let j = pj + 1; j < pend; j++) {
     const nm = lines[j].match(/^\s*-\s+name:\s*(.+?)\s*$/);
     if (nm && cleaned(nm[1]) === name) die(`profile "${user}" already has a project named "${name}"`);
   }
@@ -125,24 +163,75 @@ export function addProjectToYaml(content: string, user: string, snippet: string,
   return lines.join("\n");
 }
 
-export type AddOpts = { name?: string; branch?: string; profile?: string; write?: boolean };
+/**
+ * Insert `snippet` at the end of `user`'s `servers:` list, creating the `servers:`
+ * block (right after `projects:`) if the profile doesn't have one. Refuses (via die)
+ * if a server for `projectName` already exists. Pure: returns the new content.
+ */
+export function addServerToYaml(content: string, user: string, snippet: string, projectName: string): string {
+  const lines = content.split("\n");
+  const { start, end, userIndent } = findProfile(lines, user);
+  const keyIndent = userIndent + 2;
+  const snippetLines = snippet.replace(/\n$/, "").split("\n");
+
+  const sj = findKeyLine(lines, start, end, keyIndent, "servers");
+  if (sj >= 0) {
+    const send = listEnd(lines, sj, end, keyIndent);
+    for (let j = sj + 1; j < send; j++) {
+      const pm = lines[j].match(/^\s*-?\s*project:\s*(.+?)\s*$/);
+      if (pm && cleaned(pm[1]) === projectName)
+        die(`profile "${user}" already has a server for project "${projectName}"`);
+    }
+    lines.splice(send, 0, ...snippetLines);
+    return lines.join("\n");
+  }
+
+  // No servers: block yet — create one right after projects: (or at the block's end).
+  const pj = findKeyLine(lines, start, end, keyIndent, "projects");
+  const insertAt = pj >= 0 ? listEnd(lines, pj, end, keyIndent) : end;
+  const header = `${" ".repeat(keyIndent)}servers: # always-on Remote Control servers (one per project) for the phone`;
+  lines.splice(insertAt, 0, header, ...snippetLines);
+  return lines.join("\n");
+}
+
+export type AddOpts = {
+  name?: string;
+  branch?: string;
+  profile?: string;
+  write?: boolean;
+  /** Also add an always-on Remote Control server (default true; --no-server disables). */
+  server?: boolean;
+  serverName?: string;
+  spawn?: string;
+  capacity?: number;
+};
 
 /** CLI entrypoint for `devbox add`. Preview unless --write (and never on DEVBOX_DRYRUN). */
 export function runAdd(cfg: Config, opts: AddOpts) {
   const prof = resolveProfile(cfg, opts.profile);
   const d = detectProject(opts);
-  const snippet = projectEntry(d);
+  const wantServer = opts.server !== false;
+  const projSnippet = projectEntry(d);
+  const srvSnippet = wantServer
+    ? serverEntry(d.name, { name: opts.serverName, spawn: opts.spawn, capacity: opts.capacity })
+    : "";
   const repoForCmd = cfg.repoPath ?? "<claude-devbox-repo>";
-  const playbookCmd = `cd ${repoForCmd}/ansible && ansible-playbook -i inventory.ini playbook.yml --tags projects`;
+  // `remote` brings the new always-on RC server online; drop it when --no-server.
+  const tags = wantServer ? "projects,remote" : "projects";
+  const playbookCmd = `cd ${repoForCmd}/ansible && ansible-playbook -i inventory.ini playbook.yml --tags ${tags}`;
 
   const preview = !opts.write || !!process.env.DEVBOX_DRYRUN;
   if (preview) {
     const target = cfg.repoPath
       ? join(cfg.repoPath, "ansible", "group_vars", "all.yml")
       : "ansible/group_vars/all.yml  (repoPath not set — `--write` will fail until you re-run gen-editor-config.py --cli)";
+    const serverBlock = wantServer
+      ? `\nand an always-on Remote Control server under its servers:\n\n${srvSnippet}\n`
+      : "\n(--no-server: no Remote Control server will be added)\n";
     process.stdout.write(
       `Add project '${d.name}' to profile '${prof}'.\n\n` +
-        `Would insert under that profile's projects: in\n  ${target}\n\n${snippet}\n` +
+        `Would insert under that profile's projects: in\n  ${target}\n\n${projSnippet}` +
+        `${serverBlock}\n` +
         `Then apply on the box:\n  ${playbookCmd}\n`,
     );
     return;
@@ -152,10 +241,12 @@ export function runAdd(cfg: Config, opts: AddOpts) {
   if (!cfg.repoPath) die("config has no repoPath — re-run `gen-editor-config.py --cli` to record the repo location");
   const ymlPath = join(cfg.repoPath, "ansible", "group_vars", "all.yml");
   if (!existsSync(ymlPath)) die(`group_vars not found at ${ymlPath}`);
-  const after = addProjectToYaml(readFileSync(ymlPath, "utf8"), prof, snippet, d.name);
+  let after = addProjectToYaml(readFileSync(ymlPath, "utf8"), prof, projSnippet, d.name);
+  if (wantServer) after = addServerToYaml(after, prof, srvSnippet, d.name);
   writeFileSync(ymlPath, after);
+  const what = wantServer ? `project '${d.name}' + Remote Control server` : `project '${d.name}'`;
   process.stdout.write(
-    `✓ added project '${d.name}' to profile '${prof}' in\n  ${ymlPath}\n\n` +
+    `✓ added ${what} to profile '${prof}' in\n  ${ymlPath}\n\n` +
       `Now apply on the box:\n  ${playbookCmd}\n`,
   );
 }

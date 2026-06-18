@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addProjectToYaml, projectEntry, toSshUrl } from "./add";
+import { addProjectToYaml, addServerToYaml, projectEntry, serverEntry, titleize, toSshUrl } from "./add";
 
 describe("toSshUrl", () => {
   test("https → git@host:owner/repo.git", () => {
@@ -31,6 +31,33 @@ describe("projectEntry", () => {
         "        install: true # run `bun install` after clone\n" +
         "        update: false # don't git-pull over Claude's local edits\n" +
         "        ports: []\n",
+    );
+  });
+});
+
+describe("titleize", () => {
+  test("hyphens and underscores → spaced Title Case", () => {
+    expect(titleize("verti-monorepo")).toBe("Verti Monorepo");
+    expect(titleize("ecomm_insight_mcp")).toBe("Ecomm Insight Mcp");
+    expect(titleize("app")).toBe("App");
+  });
+});
+
+describe("serverEntry", () => {
+  test("defaults: titleized name, worktree spawn, capacity 32", () => {
+    expect(serverEntry("verti-monorepo")).toBe(
+      "      - project: verti-monorepo\n" +
+        '        name: "Verti Monorepo" # title shown in the phone app\n' +
+        "        spawn: worktree # worktree | same-dir | session\n" +
+        "        capacity: 32\n",
+    );
+  });
+  test("honors overrides", () => {
+    expect(serverEntry("myproj", { name: "Custom", spawn: "session", capacity: 4 })).toBe(
+      "      - project: myproj\n" +
+        '        name: "Custom" # title shown in the phone app\n' +
+        "        spawn: session # worktree | same-dir | session\n" +
+        "        capacity: 4\n",
     );
   });
 });
@@ -92,5 +119,44 @@ describe("addProjectToYaml", () => {
 
   test("refuses an unknown profile", () => {
     expect(() => addProjectToYaml(YML, "nope", snippet, "myproj")).toThrow(/not found/);
+  });
+});
+
+const srv = serverEntry("myproj", { name: "MyProj" });
+
+describe("addServerToYaml", () => {
+  test("appends to an existing servers: block", () => {
+    const out = addServerToYaml(YML, "ilterugur", srv, "myproj");
+    const lines = out.split("\n");
+    const serversIdx = lines.findIndex((l) => l.trim() === "servers:");
+    const insurIdx = lines.findIndex((l) => l.includes('name: "InsurChat"'));
+    const newIdx = lines.findIndex((l) => l.includes("project: myproj"));
+    expect(newIdx).toBeGreaterThan(serversIdx);
+    expect(newIdx).toBeGreaterThan(insurIdx); // after the existing server
+  });
+
+  test("creates a servers: block when the profile has none, right after projects:", () => {
+    const out = addServerToYaml(YML, "other", srv, "myproj");
+    const lines = out.split("\n");
+    // The new servers: must belong to 'other' (after alpha), not the first profile.
+    const alphaIdx = lines.findIndex((l) => l.includes("name: alpha"));
+    const serversIdxs = lines.map((l, i) => (l.trim().startsWith("servers:") ? i : -1)).filter((i) => i >= 0);
+    const otherServers = serversIdxs.find((i) => i > alphaIdx)!;
+    expect(otherServers).toBeGreaterThan(alphaIdx);
+    const newIdx = lines.findIndex((l) => l.includes("project: myproj"));
+    expect(newIdx).toBeGreaterThan(otherServers);
+  });
+
+  test("preserves every original line", () => {
+    const out = addServerToYaml(YML, "other", srv, "myproj");
+    for (const orig of YML.split("\n").filter((l) => l.trim())) expect(out).toContain(orig);
+  });
+
+  test("refuses a duplicate server for the same project", () => {
+    expect(() => addServerToYaml(YML, "ilterugur", srv, "insurchat")).toThrow(/already has a server/);
+  });
+
+  test("refuses an unknown profile", () => {
+    expect(() => addServerToYaml(YML, "nope", srv, "myproj")).toThrow(/not found/);
   });
 });
