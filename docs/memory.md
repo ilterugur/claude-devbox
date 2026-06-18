@@ -129,6 +129,22 @@ If `uv` is absent the role will error during provisioning with a clear message.
 
 ---
 
+## Verifying / troubleshooting
+
+After provisioning, confirm the plugin is active for each profile:
+
+```bash
+sudo -u <user> env HOME=/home/<user> /home/<user>/.local/bin/claude plugin list
+```
+
+`hindsight-memory` should appear in the output and be listed as enabled.
+
+If memories are being **saved** but never **recalled** (i.e. nothing is injected into context at the start of a prompt), the most likely cause is that the plugin is installed but not enabled — or the installed Claude Code version does not auto-load plugin hooks. Re-enable the plugin (`claude plugin enable hindsight-memory` as the profile user) or update Claude Code, then re-test.
+
+The custom tagged retain hook (`/usr/local/bin/hindsight-retain-tagged`) is registered directly in `~/.claude/settings.json` and runs independently of plugin enablement. This means **saving can work even when recall doesn't** — which is the tell-tale sign of this issue: memories accumulate but are never surfaced.
+
+---
+
 ## References
 
 - [Vectorize Hindsight — GitHub](https://github.com/vectorize-io/hindsight)
