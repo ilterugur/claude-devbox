@@ -17,7 +17,35 @@ operator_private_key_path: "~/.ssh/id_ed25519" # for the pre-hardening probe
 
 # ── Box tuning ────────────────────────────────────────────────────────────────
 swap_file: /swapfile
-swap_size: 4G
+swap_size: 4G # bump (e.g. 8G/12G) so heavy builds swap instead of getting OOM-killed
+
+# zram: compressed RAM swap, used before the disk swapfile (higher priority). Gives
+# memory-heavy builds extra effective RAM at ~2-3x compression so they finish under
+# pressure instead of triggering the OOM killer — without upgrading the box.
+# zram_enabled: true
+# zram_percent: 50    # zram size = 50% of RAM
+# zram_algo: zstd
+# zram_priority: 100  # > disk swap (-1): zram is used first
+
+# ── Per-server resource limits (systemd cgroup) ───────────────────────────────
+# Applied to every always-on Remote Control server unit, so a runaway build is
+# confined to its own cgroup and can never freeze the box or your interactive
+# shell. Empty string = no limit for that knob. Override per-server by adding a
+# `limits:` map to a server entry under `servers:`.
+# rc_limits:
+#   memory_high: "5G"     # soft: kernel reclaims/swaps past this (slows, no kill)
+#   memory_max: "6G"      # hard RAM cap; excess spills to swap, not the host
+#   memory_swap_max: ""   # cap on swap for this unit ("" = system swap)
+#   cpu_weight: 80        # relative CPU share under contention (<100 yields to shells)
+#   cpu_quota: ""         # absolute cap, e.g. "300%" = 3 of 4 cores ("" = uncapped)
+#   io_weight: 80
+#   nice: 5               # build niceness (>0 = lower priority than interactive work)
+#   oom_score_adjust: 300 # if the host ever OOMs, kill builds first, not your shell
+#
+# Build memory caps injected into every RC server's environment (per-server
+# override: `build_env:` on a server entry):
+# rc_build_env:
+#   NODE_OPTIONS: "--max-old-space-size=2048"
 
 # ── Private networking ────────────────────────────────────────────────────────
 # Use a REUSABLE, NON-ephemeral key (https://login.tailscale.com/admin/settings/keys).
