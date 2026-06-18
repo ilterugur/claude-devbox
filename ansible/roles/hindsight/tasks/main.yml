@@ -211,3 +211,71 @@
     - not (hindsight_expose_tailscale | default(false))
     - (':' ~ ((hindsight_serve_https_port | default(9443)) + idx)) in (hs_serve_status.stdout | default(''))
   changed_when: true
+
+# ── Optional control-plane web UI (hindsight_control_plane) ────────────────────
+# A per-profile Hindsight Control Plane web app (npx @vectorize-io/hindsight-control-plane)
+# fronting that profile's daemon — a visual memory browser. Bound to the tailnet
+# (0.0.0.0; public blocked by UFW), reachable at http://<node>.<tailnet>.ts.net:<ui_port>.
+# Served directly (not via Tailscale Serve) — the app mishandles TLS-terminating proxies.
+
+# Legacy cleanup: an early manual setup used a single (non-per-profile)
+# hindsight-control-plane.service. Remove it so the per-profile unit doesn't collide
+# on the UI port. Idempotent — no-ops if it was never there.
+- name: Remove the legacy non-per-profile Hindsight Control Plane service
+  ansible.builtin.systemd_service:
+    name: "hindsight-control-plane.service"
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove the legacy non-per-profile Hindsight Control Plane unit file
+  ansible.builtin.file:
+    path: /etc/systemd/system/hindsight-control-plane.service
+    state: absent
+  notify: Reload systemd
+
+- name: Render the Hindsight Control Plane unit per profile
+  ansible.builtin.template:
+    src: hindsight-control-plane.service.j2
+    dest: "/etc/systemd/system/hindsight-control-plane-{{ item.user }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+    index_var: idx
+  when: hindsight_control_plane | default(false)
+  notify: Reload systemd
+
+- name: Enable and start the Hindsight Control Plane per profile
+  ansible.builtin.systemd_service:
+    name: "hindsight-control-plane-{{ item.user }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when: hindsight_control_plane | default(false)
+
+- name: Stop the Hindsight Control Plane when disabled
+  ansible.builtin.systemd_service:
+    name: "hindsight-control-plane-{{ item.user }}.service"
+    state: stopped
+    enabled: false
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when: not (hindsight_control_plane | default(false))
+  failed_when: false
+
+- name: Remove the Hindsight Control Plane unit file when disabled
+  ansible.builtin.file:
+    path: "/etc/systemd/system/hindsight-control-plane-{{ item.user }}.service"
+    state: absent
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when: not (hindsight_control_plane | default(false))
+  notify: Reload systemd

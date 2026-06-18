@@ -158,6 +158,12 @@ hindsight_llm_base_url: "" # optional custom OpenAI-compatible endpoint ("" = pr
 #  has none — rely on your Tailscale ACLs). Default off (loopback only).
 # hindsight_expose_tailscale: false
 # hindsight_serve_https_port: 9443   # Tailscale Serve HTTPS port; profile gets port+index
+#  Optional control-plane WEB UI per profile (npx @vectorize-io/hindsight-control-plane) —
+#  a visual memory browser fronting the daemon. Tailnet-only on http://<node>.<tailnet>.
+#  ts.net:(cp_port+index) (public blocked by UFW); served directly, not via Tailscale
+#  Serve (the app mishandles a TLS-terminating proxy). Needs node in runtimes. Off by default.
+# hindsight_control_plane: false
+# hindsight_control_plane_base_port: 19077   # UI port = base + profile index
 #  Escape hatch: true = isolated per-project banks instead of one tagged profile bank.
 #  Default false (profile-wide + tags) — per-project fragments personal-assistant memory.
 # hindsight_per_project: false
