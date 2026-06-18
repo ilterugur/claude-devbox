@@ -146,7 +146,7 @@ environment variables written to `~/.hindsight/llm.env`, mode 0600):
 ```yaml
 hindsight_llm_provider: openrouter
 hindsight_llm_api_key: "sk-or-..."
-hindsight_llm_model: "meta-llama/llama-3.3-8b-instruct:free"
+hindsight_llm_model: "openai/gpt-oss-20b"
 ```
 
 **Example — Ollama** (fully keyless, fully local):

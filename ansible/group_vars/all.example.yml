@@ -118,7 +118,7 @@ hindsight_enabled: true
 #  a custom OpenAI-compatible endpoint via hindsight_llm_base_url.
 hindsight_llm_provider: "openrouter"
 hindsight_llm_api_key: "REPLACE_ME" # required, except keyless providers (ollama/local)
-hindsight_llm_model: "openai/gpt-4o-mini" # any model the provider serves ("" = provider default)
+hindsight_llm_model: "openai/gpt-oss-20b" # any model the provider serves ("" = provider default)
 hindsight_llm_base_url: "" # optional custom OpenAI-compatible endpoint ("" = provider default)
 #  Base port for the per-profile local daemon (loopback). Each profile gets base+index
 #  (9077, 9078, …) so multiple profiles don't collide. Single profile stays on 9077.
