@@ -42,7 +42,7 @@
         path: /tmp/google-chrome-stable_current_amd64.deb
         state: absent
 
-- name: Wire browser MCP servers into each profile (user scope ~/.claude.json)
+- name: Wire browser MCP servers into each profile — launch own Chrome (user scope ~/.claude.json)
   # Idempotent: sets only the "playwright" + "chrome-devtools" mcpServers entries,
   # preserving any others. Both launch via npx at runtime; node/npx
   # resolve through mise shims for the Remote Control service and interactive sessions.
@@ -50,6 +50,7 @@
   #                      console + network inspection). The default for automation.
   #   chrome-devtools  — deeper CDP debugging: performance traces / Web Vitals,
   #                      network bodies+timing, CPU/network throttling.
+  when: not browser_remote_failover
   ansible.builtin.command:
     cmd: >-
       python3 -c 'import json,os;
@@ -58,6 +59,30 @@
       m=d.setdefault("mcpServers",{});
       m["playwright"]={"command":"npx","args":["-y","@playwright/mcp@latest","--browser","chrome","--headless","--no-sandbox"]};
       m["chrome-devtools"]={"command":"npx","args":["-y","chrome-devtools-mcp@latest","--headless","--isolated","--channel","stable","--chrome-arg=--no-sandbox","--chrome-arg=--disable-setuid-sandbox","--no-usage-statistics"]};
+      json.dump(d,open(p,"w"),indent=2)'
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  changed_when: false
+
+- name: Wire browser MCP servers into each profile — attach to CDP failover endpoint (user scope ~/.claude.json)
+  # Idempotent: sets only the "playwright" + "chrome-devtools" mcpServers entries,
+  # preserving any others. Both attach to the shared CDP endpoint at browser_cdp_port
+  # instead of launching their own headless Chrome instance.
+  #   playwright       — attach via --cdp-endpoint to a running Chrome/Chromium remote.
+  #   chrome-devtools  — attach via --browserUrl to the same CDP endpoint.
+  when: browser_remote_failover
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c 'import json,os;
+      p=os.path.expanduser("~/.claude.json");
+      d=json.load(open(p)) if os.path.exists(p) else {};
+      m=d.setdefault("mcpServers",{});
+      m["playwright"]={"command":"npx","args":["-y","@playwright/mcp@latest","--cdp-endpoint","http://127.0.0.1:{{ browser_cdp_port }}"]};
+      m["chrome-devtools"]={"command":"npx","args":["-y","chrome-devtools-mcp@latest","--browserUrl","http://127.0.0.1:{{ browser_cdp_port }}","--no-usage-statistics"]};
       json.dump(d,open(p,"w"),indent=2)'
   become_user: "{{ item.user }}"
   environment:
