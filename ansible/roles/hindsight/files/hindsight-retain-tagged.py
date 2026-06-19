@@ -3,7 +3,8 @@
 
 Wraps the Hindsight plugin's own run_retain() — reusing all its transcript parsing,
 chunking, compaction handling, daemon resolution and POST — and only injects extra
-tags: source:claude-code, profile:<HINDSIGHT_USER_ID>, project:<repo-from-cwd>.
+tags: source:claude-code, project:<repo-from-cwd>. (No profile tag: the bank is already
+per-profile — bankId = the profile's username — so a profile tag would just duplicate it.)
 
 The plugin's built-in auto-retain is disabled (autoRetain:false in
 ~/.hindsight/claude-code.json) so retention happens exactly once, here, with tags.
@@ -33,12 +34,10 @@ def find_plugin_scripts():
     return os.path.dirname(hits[0])
 
 
-def build_extra_tags(user, project, base):
-    """Append source/profile/project tags to `base`, skipping blanks and dups."""
+def build_extra_tags(project, base):
+    """Append source/project tags to `base`, skipping blanks and dups."""
     tags = list(base or [])
     extra = ["source:claude-code"]
-    if user:
-        extra.append("profile:{}".format(user))
     if project:
         extra.append("project:{}".format(project))
     for t in extra:
@@ -71,7 +70,6 @@ def main():
         return
 
     cwd = hook_input.get("cwd", "")
-    user = os.environ.get("HINDSIGHT_USER_ID", "")
 
     def patched_load_config():
         cfg = orig_load_config()
@@ -80,7 +78,7 @@ def main():
             project = _resolve_project_name(cwd, cfg)
         except Exception:
             project = os.path.basename(cwd) if cwd else ""
-        cfg["retainTags"] = build_extra_tags(user, project, cfg.get("retainTags"))
+        cfg["retainTags"] = build_extra_tags(project, cfg.get("retainTags"))
         return cfg
 
     hs_retain.load_config = patched_load_config

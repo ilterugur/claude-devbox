@@ -209,7 +209,8 @@ reach the URL (`curl .../health`).
   `git clone --depth 1 https://github.com/vectorize-io/hindsight.git ~/.claude/plugins/marketplaces/hindsight`,
   `claude plugin marketplace add ~/.claude/plugins/marketplaces/hindsight`,
   `claude plugin install hindsight-memory`. Then write `~/.hindsight/claude-code.json`:
-  `{"hindsightApiUrl":"https://<node>.<tailnet>.ts.net:<serve_port>","bankId":"<profile>","dynamicBankId":false,"autoRecall":true,"autoRetain":true,"enableKnowledgeTools":true,"retainTags":["source:claude-code","profile:<profile>"]}`.
+  `{"hindsightApiUrl":"https://<node>.<tailnet>.ts.net:<serve_port>","bankId":"<profile>","dynamicBankId":false,"autoRecall":true,"autoRetain":true,"enableKnowledgeTools":true,"retainTags":["source:claude-code"]}`
+  (no `profile:` tag — the bank is already per-profile, so it would just duplicate `bankId`).
 
 - **Claude Code (desktop app):** it runs Claude Code in a Linux VM, so the `claude`
   binary isn't host-runnable — but it READS host `~/.claude`. Register the plugin by

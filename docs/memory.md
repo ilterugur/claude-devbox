@@ -114,14 +114,15 @@ Every retained memory is auto-tagged:
 
 | Tag | Value | Purpose |
 | --- | --- | --- |
-| `source` | `claude-code` | identifies the origin system |
-| `profile` | `<Linux username>` | which profile retained it |
-| `project` | `<repo name>` | which repo (worktree-aware) |
+| `source` | `claude-code` / `hermes` / `codex` | identifies the origin client |
+| `project` | `<repo name>` | which repo (worktree-aware; empty for cross-project facts) |
 
-These tags let you filter later using the `agent_knowledge_*` tools. For example,
-to recall only memories from a specific repo you can ask the agent to search with
-`project:<repo>`, or to see everything from your work profile, filter by
-`profile:work`. The tools accept tag filters directly.
+There is intentionally **no `profile` tag**: the bank is already per-profile (its `bankId`
+is the profile's username), so a profile tag would just duplicate the bank identity. The
+`source` tag is the useful discriminator inside the shared bank — it separates Claude Code,
+Hermes, and Codex memories. These tags let you filter later using the `agent_knowledge_*`
+tools: e.g. recall only a specific repo's memories by searching `project:<repo>`, or only
+Hermes-written ones with `source:hermes`. The tools accept tag filters directly.
 
 ### Per-project isolation (escape hatch)
 
