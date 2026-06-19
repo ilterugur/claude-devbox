@@ -81,7 +81,6 @@
     label: "{{ item.user }}"
   failed_when: false
   changed_when: false
-  changed_when: false
 
 - name: Source the Hindsight env file from each profile's interactive shell
   ansible.builtin.blockinfile:
