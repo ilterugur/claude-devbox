@@ -135,8 +135,10 @@ browser_automation: true
 # ── Long-term agent memory: Vectorize Hindsight (ON by default) ────────────────
 #  Wires Hindsight into Claude Code per profile: a UserPromptSubmit hook recalls
 #  relevant memories into context; a Stop hook retains new facts after each response.
-#  Runs fully local per profile (uvx hindsight-embed daemon, port 9077); ONLY the LLM
-#  extraction/recall calls leave the box. Memory is ONE profile-wide bank (it remembers
+#  Runs per profile (uvx hindsight-embed daemon, port 9077). By DEFAULT only the LLM
+#  extraction/recall calls leave the box (embeddings are local); if you enable a remote
+#  embedder or reranker below, memory text is sent to that provider too. Memory is ONE
+#  profile-wide bank (it remembers
 #  you across ALL your projects — personal-assistant style), auto-tagged with
 #  source/profile/project so you can filter it later via the agent_knowledge_* tools.
 #  Requires `uv` in runtimes (the daemon runs via uvx). READ docs/memory.md.
@@ -152,8 +154,8 @@ hindsight_llm_api_key: "REPLACE_ME"        # put the real sk-or-... key in all.y
 hindsight_llm_model: "openai/gpt-oss-20b"  # any model the provider serves ("" = provider default)
 hindsight_llm_base_url: ""                  # optional custom OpenAI-compatible endpoint
 #
-#  ── OpenAI Codex (alternative, keyless) — uses the box's Codex / ChatGPT OAuth, so memory
-#     extraction costs nothing on OpenRouter. Requires a logged-in Codex session on the box
+#  ── OpenAI Codex (alternative, keyless) — uses the box's Codex / ChatGPT OAuth session, so
+#     no API key and no per-token spend. Requires a logged-in Codex session on the box
 #     (~/.codex/auth.json). To switch: comment the OpenRouter block above, uncomment this:
 # hindsight_llm_provider: "openai-codex"
 # hindsight_llm_api_key: ""                  # not needed — Codex uses its OAuth session

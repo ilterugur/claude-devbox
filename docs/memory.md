@@ -288,10 +288,13 @@ daemon's default embedder (`BAAI/bge-small-en-v1.5`) is English-only, so non-Eng
 gets weak embeddings: a Turkish query recalls an English memory poorly, and the same fact
 in two languages stays below the dedup threshold (so it never reaches the merge gate and
 piles up). Per [Hindsight's multilingual guidance](https://hindsight.vectorize.io/developer/multilingual),
-the fix is to **preserve the original language** and use a **multilingual embedder** — a
-local on-box option is `intfloat/multilingual-e5-small` (384-dim) via the `onnx` provider;
-optionally pair it with `hindsight_text_search_extension: pgroonga` for mixed-script
-lexical search. See [Splitting providers](#splitting-providers) for how to set the embedder.
+the fix is to **preserve the original language** and use a **multilingual embedder**. Two
+ways to set one (see [Splitting providers](#splitting-providers)): a **remote** model such
+as `openai/text-embedding-3-small` (or, stronger on Turkish, `cohere/embed-v4.0`) via the
+`openrouter` provider — sends text off-box but no local model to host; or a **local** on-box
+model `intfloat/multilingual-e5-small` (384-dim) via the `onnx` provider — free and private.
+Optionally pair either with `hindsight_text_search_extension: pgroonga` for mixed-script
+lexical search.
 (Forcing every memory into one language via `HINDSIGHT_API_LLM_OUTPUT_LANGUAGE` is the
 alternative, but it discards the natural language and goes against the default behavior.)
 
