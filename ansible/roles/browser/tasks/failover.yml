@@ -1,3 +1,16 @@
+- name: Remove the legacy hand-built fallback Chrome unit if present
+  ansible.builtin.systemd_service:
+    name: hermes-chrome.service
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Delete the legacy unit file
+  ansible.builtin.file:
+    path: /etc/systemd/system/hermes-chrome.service
+    state: absent
+  notify: Reload systemd
+
 - name: Install HAProxy
   ansible.builtin.apt:
     name: haproxy
