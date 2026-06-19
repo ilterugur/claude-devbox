@@ -1,0 +1,15 @@
+- name: Deploy fallback headless Chrome unit
+  ansible.builtin.template:
+    src: devbox-fallback-chrome.service.j2
+    dest: /etc/systemd/system/devbox-fallback-chrome.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Enable and start the fallback Chrome service
+  ansible.builtin.systemd_service:
+    name: devbox-fallback-chrome.service
+    enabled: true
+    state: started
+    daemon_reload: true

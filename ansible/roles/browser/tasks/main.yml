@@ -91,3 +91,7 @@
   loop_control:
     label: "{{ item.user }}"
   changed_when: false
+
+- name: Set up the CDP failover endpoint (HAProxy + fallback Chrome)
+  ansible.builtin.include_tasks: failover.yml
+  when: browser_remote_failover
