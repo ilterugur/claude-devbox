@@ -274,10 +274,10 @@ disposable cwd, and clean up any test memories via the control plane.
 ## Remote browser failover — client wiring
 
 The `browser` role can optionally expose a **CDP (Chrome DevTools Protocol) failover
-endpoint** so the box's browser MCPs (`mcp__Claude_in_Chrome__*`,
-`mcp__Claude_Preview__*`) attach to the operator's **client browser** when online —
-residential IP, isolated profile, observable — and fall back to a server-side headless
-Chrome when offline.
+endpoint** so the box's per-profile **`playwright`** and **`chrome-devtools`** MCP
+servers attach to the operator's **client browser** when online — residential IP,
+isolated profile, observable — and fall back to a server-side headless Chrome when
+offline.
 
 ### Step 1 — Enable server side
 
@@ -286,6 +286,8 @@ In `ansible/group_vars/all.yml` set:
 ```yaml
 browser_remote_failover: true
 ```
+
+(Requires `browser_automation: true`, which is the default.)
 
 Then re-run the playbook with the `browser` tag:
 
@@ -327,7 +329,7 @@ enabled. Save as `~/Library/LaunchAgents/com.devbox.agent-chrome.plist`:
 </plist>
 ```
 
-Replace `<operator>` with your macOS username. The `--user-data-dir` path must be
+Replace `[operator]` with your macOS username. The `--user-data-dir` path must be
 absolute (launchd does not expand `$HOME`).
 
 > **Security — use low-stakes accounts only.** The agent has full programmatic control
@@ -346,7 +348,7 @@ automatically. To stop the agent browser, bootout the agent (see Step 4).
 First add the box's host key to avoid interactive prompts:
 
 ```bash
-ssh-keyscan -T 8 <box>.<tailnet>.ts.net >> ~/.ssh/known_hosts
+ssh-keyscan -T 8 [box].[tailnet].ts.net >> ~/.ssh/known_hosts
 ```
 
 Then create `~/Library/LaunchAgents/com.devbox.cdp-tunnel.plist`:
@@ -383,7 +385,7 @@ Then create `~/Library/LaunchAgents/com.devbox.cdp-tunnel.plist`:
 </plist>
 ```
 
-Replace `<operator>` with the operator username and `<box>.<tailnet>.ts.net` with your
+Replace `[operator]` with the operator username and `[box].[tailnet].ts.net` with your
 box's Tailscale hostname. The tunnel forwards the box's `127.0.0.1:9322` to the
 client's `localhost:9222`, making the client browser reachable from the box.
 
