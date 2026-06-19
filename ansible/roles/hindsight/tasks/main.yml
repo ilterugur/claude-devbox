@@ -72,7 +72,7 @@
   ansible.builtin.command:
     cmd: >-
       uvx hindsight-embed -p claude-code profile set-env claude-code
-      HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD {{ hindsight_dedup_threshold | default('0.90') }}
+      HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD {{ hindsight_dedup_threshold | default('0.95') }}
   become_user: "{{ item.user }}"
   environment:
     HOME: "/home/{{ item.user }}"

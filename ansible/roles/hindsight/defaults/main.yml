@@ -1,4 +1,43 @@
 ---
+# ── Provider configuration: LLM / embeddings / reranker, each independent ──────
+# The default LLM (hindsight_llm_provider / _api_key / _model / _base_url, set in
+# group_vars/all.yml) is used by EVERY memory operation. On top of that you can override
+# any single operation, swap the embedder, or add a reranker — each can point at a
+# DIFFERENT provider (e.g. OpenRouter for the LLM, OpenAI text-embedding-3-small for the
+# embedder, Cohere for the reranker). It all renders into ~/.hindsight/llm.env (0600),
+# which the daemon inherits. Restart the daemon to pick up changes. See docs/memory.md
+# → "Splitting providers". Defaults below keep the original behaviour (single LLM, local
+# embedder, no reranker) until you set them.
+
+# Optional concurrency cap for the default LLM ("" = provider/daemon default).
+hindsight_llm_max_concurrent: ""
+
+# Per-operation LLM overrides. Each is a dict {provider, model, api_key, base_url};
+# empty {} = use the default LLM. e.g. a cheap model for retain, a stronger one for reflect.
+hindsight_retain_llm: {}
+hindsight_reflect_llm: {}
+hindsight_consolidation_llm: {}
+
+# Embedder. Empty {} = the daemon's built-in LOCAL embedder (memory text never leaves the
+# box). Set {provider, model, api_key, base_url} to override — a REMOTE provider (openai,
+# cohere, …) sends memory text off the box. For a LOCAL multilingual embedder use the
+# 'onnx' provider via hindsight_extra_env (its params don't fit the model/key/url shape;
+# see docs/memory.md and group_vars/all.example.yml).
+hindsight_embeddings: {}
+
+# Reranker (optional; off by default). dict {provider, model, api_key, base_url, max_candidates}.
+hindsight_reranker: {}
+
+# Search backends (optional; "" = daemon defaults). Text-search extension
+# (native/pgroonga/pg_search/…) and vector extension (pgvector/vchord/…).
+hindsight_text_search_extension: ""
+hindsight_vector_extension: ""
+
+# Raw escape hatch: a map of any HINDSIGHT_API_* key -> value, rendered verbatim into the
+# env file (emitted last, so it wins). For knobs without a dedicated var — onnx embedding
+# params, HINDSIGHT_API_LLM_OUTPUT_LANGUAGE, etc.
+hindsight_extra_env: {}
+
 # ── Bank-level memory tuning (see docs/memory.md) ─────────────────────────────
 # Keeps memory focused on "important, durable things" instead of "everything".
 # retainMission/bankMission are written into the per-profile claude-code.json and
@@ -67,6 +106,13 @@ hindsight_entity_labels:
     values: []
 
 # Consolidation dedup similarity threshold (HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD):
-# lower = merge near-duplicate observations more aggressively (1.0 = off). Default 0.97;
-# 0.90 collapses paraphrase duplicates. Daemon-global (set on the embed profile env).
-hindsight_dedup_threshold: "0.90"
+# the cosine similarity at/above which a candidate pair is sent to a focused LLM
+# "merge or keep" call (the LLM reads both texts and respects number/negation/entity
+# differences). lower = more candidate pairs reach the LLM (1.0 = off). Hindsight's own
+# default is 0.97 (the value the maintainers ship); we use a slightly looser 0.95 to also
+# catch close paraphrase duplicates while staying conservative — the LLM gate makes the
+# merge safe, but a smaller extraction model errs more on borderline pairs, so we don't go
+# lower. Daemon-global (set on the embed profile env). NOTE: dedup only compares within the
+# same tag scope, so the language-normalized missions above (English-only) matter — they
+# keep semantically identical facts in one language so they actually reach this gate.
+hindsight_dedup_threshold: "0.95"

@@ -35,11 +35,13 @@ Three pieces cooperate once provisioning runs:
    and delete memories. Useful for explicit "remember this" or "forget that"
    instructions, or for filtered recall (e.g. query restricted to a single project).
 
-Underneath all of this runs a **fully local daemon** (`uvx hindsight-embed`, the plugin's default port 9077), one per profile. It stores memories on disk and handles the embedding
-work locally. **Only LLM extraction and recall calls leave the box** (to whichever
-LLM provider you configure). The embeddings themselves never leave: remote
-embeddings are not supported through this integration, and the daemon's default
-local mode is the only one used.
+Underneath all of this runs a **local daemon** (`uvx hindsight-embed`, the plugin's default
+port 9077), one per profile. It stores memories on disk. **By default only LLM extraction
+and recall calls leave the box** — embeddings are computed **locally** with the daemon's
+built-in model, so memory text stays on the box. This is the default and the recommended
+posture. You *can* point the embedder (or reranker) at a remote provider — see
+[Splitting providers](#splitting-providers) — but doing so sends memory text to that
+provider, so it's a deliberate opt-in, not the default.
 
 ---
 
@@ -169,6 +171,71 @@ The playbook fails fast at provision time if `hindsight_enabled: true` but no
 provider/key is configured (and there is no `base_url` to substitute) — better
 to catch it early than have the daemon silently fail at runtime.
 
+### Splitting providers
+
+The default LLM above is used by **every** memory operation. Hindsight also lets each
+capability run on a **different** provider — a cheap model for one operation and a strong
+one for another, a dedicated embedder, an optional reranker. All of these render into the
+same `~/.hindsight/llm.env` (0600) that the daemon inherits; everything is optional and
+unset by default (single LLM, local embedder, no reranker). **Restart the daemon after
+changing any of these on a live box** — it persists (`daemonIdleTimeout: 0`) and won't
+re-read the env until restarted.
+
+| Variable | Shape | Maps to | Purpose |
+| --- | --- | --- | --- |
+| `hindsight_llm_max_concurrent` | scalar | `HINDSIGHT_API_LLM_MAX_CONCURRENT` | concurrency cap for the default LLM |
+| `hindsight_retain_llm` | `{provider, model, api_key, base_url}` | `HINDSIGHT_API_RETAIN_LLM_*` | override the LLM for the **retain** (extraction) step only |
+| `hindsight_reflect_llm` | same | `HINDSIGHT_API_REFLECT_LLM_*` | override the LLM for the **reflect** (recall) step only |
+| `hindsight_consolidation_llm` | same | `HINDSIGHT_API_CONSOLIDATION_LLM_*` | override the LLM for the **consolidation** (observations) step only |
+| `hindsight_embeddings` | `{provider, model, api_key, base_url}` | `HINDSIGHT_API_EMBEDDINGS_PROVIDER` + `HINDSIGHT_API_EMBEDDINGS_<PROVIDER>_*` | swap the embedder. Empty = built-in **local** embedder (on-box). A remote provider **sends memory text off the box**. |
+| `hindsight_reranker` | `{provider, model, api_key, base_url, max_candidates}` | `HINDSIGHT_API_RERANKER_PROVIDER` + `HINDSIGHT_API_RERANKER_<PROVIDER>_*` | add a reranker over recall candidates (e.g. Cohere) |
+| `hindsight_text_search_extension` | scalar | `HINDSIGHT_API_TEXT_SEARCH_EXTENSION` | lexical-search backend (`native`/`pgroonga`/`pg_search`/…) |
+| `hindsight_vector_extension` | scalar | `HINDSIGHT_API_VECTOR_EXTENSION` | vector backend (`pgvector`/`vchord`/…) |
+| `hindsight_extra_env` | map | verbatim | raw `HINDSIGHT_API_*` key→value escape hatch for knobs without a dedicated var |
+
+The `embeddings`/`reranker` keys are **provider-scoped** — Hindsight reads
+`HINDSIGHT_API_EMBEDDINGS_<PROVIDER>_MODEL` (etc.), so the template emits the provider name
+in the key. This fits the OpenAI-compatible / Cohere / Google shape (model + key + base_url).
+OpenRouter is OpenAI-compatible, so use `provider: openai` with its `base_url`. Providers
+with a different parameter shape — notably the **local `onnx`** embedder
+(`HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID`, `_DIMENSIONS`, `_QUERY_PREFIX`, …) — don't fit
+that pattern; set those raw via `hindsight_extra_env`.
+
+**Example — OpenAI `text-embedding-3-small` via OpenRouter** (remote embedder):
+
+```yaml
+hindsight_embeddings:
+  provider: openai
+  api_key: "sk-or-..."                      # OpenRouter key (or a real OpenAI key)
+  model: "openai/text-embedding-3-small"
+  base_url: "https://openrouter.ai/api/v1"
+```
+
+**Example — local multilingual embedder** (stays on the box; good for mixed TR+EN banks):
+
+```yaml
+hindsight_extra_env:
+  HINDSIGHT_API_EMBEDDINGS_PROVIDER: "onnx"
+  HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID: "intfloat/multilingual-e5-small"
+  HINDSIGHT_API_EMBEDDINGS_ONNX_DIMENSIONS: "384"
+  HINDSIGHT_API_EMBEDDINGS_ONNX_QUERY_PREFIX: "query: "
+  HINDSIGHT_API_EMBEDDINGS_ONNX_PASSAGE_PREFIX: "passage: "
+```
+
+**Example — Cohere reranker:**
+
+```yaml
+hindsight_reranker:
+  provider: cohere
+  api_key: "..."
+  model: "rerank-v3.5"
+  max_candidates: 120
+```
+
+> Changing the **embedder** changes the vector space (and often the dimension). Existing
+> memories were embedded with the old model, so after a swap you must re-embed — in
+> practice, reset/rebuild the bank — for recall to stay consistent.
+
 ---
 
 ## Prerequisites
@@ -200,10 +267,10 @@ These live in the role's `defaults/main.yml` and are overridable in `group_vars/
 |-----|-------------|---------|
 | `hindsight_retain_mission` | `claude-code.json` (`retainMission`) — plugin sets it on first retain | what the extractor pulls from each conversation |
 | `hindsight_bank_mission` | `claude-code.json` (`bankMission`) → bank `reflect_mission` | the bank's persona when surfacing memory |
-| `hindsight_observations_mission` | daemon HTTP API (`PATCH …/config`), best-effort task | what consolidation turns into long-term observations; also enforces "one canonical fact" to fight TR/EN duplicate paraphrases |
+| `hindsight_observations_mission` | daemon HTTP API (`PATCH …/config`), best-effort task | what consolidation turns into long-term observations; also enforces "one canonical fact" to fight duplicate paraphrases |
 | `hindsight_retain_every_n_turns` | `claude-code.json` (`retainEveryNTurns`) | how often a session flushes a retain (higher = fewer, less noisy writes) |
 | `hindsight_entity_labels` | daemon HTTP API (`PATCH …/config`), best-effort task | **entity-label auto-tagging** — the extractor classifies each memory from its content and writes a filterable tag (default: a `project:<name>` tag). Content-derived, so it works across **all** clients incl. Hermes (not just cwd-aware ones). Needs a daemon restart to take effect (the labels schema is cached). |
-| `hindsight_dedup_threshold` | embed profile env (`HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD`), best-effort task | consolidation dedup similarity (lower = merge near-duplicates more aggressively, 1.0 = off; default 0.90). Dedup only compares within the same tag scope. |
+| `hindsight_dedup_threshold` | embed profile env (`HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD`), best-effort task | consolidation dedup similarity — the cosine at/above which a candidate pair is sent to an LLM "merge or keep" call (it reads both texts; lower = more pairs reach the LLM, 1.0 = off). Hindsight ships 0.97; we use 0.95 to also catch close paraphrases while staying conservative. Dedup only compares within the same tag scope. |
 
 `observations_mission` isn't a plugin config key, so the role sets it directly on the
 bank via the daemon API — a **best-effort** task that no-ops when the daemon is down
@@ -211,6 +278,19 @@ bank via the daemon API — a **best-effort** task that no-ops when the daemon i
 clients have their own retain frequency; the **bank missions apply centrally** to every
 client writing to the shared bank. Changing a mission affects **future** retains only —
 existing memory stays until you prune or reset the bank.
+
+**Mixed-language banks.** If you work in more than one language (e.g. Turkish + English),
+the thing that hurts recall and dedup is the **embedder**, not the stored language. The
+daemon's default embedder (`BAAI/bge-small-en-v1.5`) is English-only, so non-English text
+gets weak embeddings: a Turkish query recalls an English memory poorly, and the same fact
+in two languages stays below the dedup threshold (so it never reaches the merge gate and
+piles up). Per [Hindsight's multilingual guidance](https://hindsight.vectorize.io/developer/multilingual),
+the fix is to **preserve the original language** and use a **multilingual embedder** — a
+local on-box option is `intfloat/multilingual-e5-small` (384-dim) via the `onnx` provider;
+optionally pair it with `hindsight_text_search_extension: pgroonga` for mixed-script
+lexical search. See [Splitting providers](#splitting-providers) for how to set the embedder.
+(Forcing every memory into one language via `HINDSIGHT_API_LLM_OUTPUT_LANGUAGE` is the
+alternative, but it discards the natural language and goes against the default behavior.)
 
 ---
 

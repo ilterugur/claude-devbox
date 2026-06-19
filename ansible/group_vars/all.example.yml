@@ -159,6 +159,54 @@ hindsight_llm_base_url: ""                  # optional custom OpenAI-compatible 
 # hindsight_llm_api_key: ""                  # not needed — Codex uses its OAuth session
 # hindsight_llm_model: "gpt-5.4-mini"
 # hindsight_llm_base_url: ""
+#
+#  ── Splitting providers: LLM / embedder / reranker, each independent ──────────
+#  The default LLM above is used by EVERY operation. On top of that you can override a
+#  single operation, swap the embedder, or add a reranker — each can point at a different
+#  provider. All optional; defaults keep one LLM + the local embedder + no reranker.
+#  (After changing any of these on a live box, RESTART the daemon to pick them up.)
+#
+#  Per-operation LLM overrides — e.g. cheap retain, stronger reflect:
+# hindsight_reflect_llm:
+#   provider: "openrouter"
+#   api_key: "REPLACE_ME"
+#   model: "anthropic/claude-sonnet-4-6"
+#   base_url: ""
+# hindsight_retain_llm: {}
+# hindsight_consolidation_llm: {}
+#
+#  Embedder — REMOTE example: OpenAI text-embedding-3-small via OpenRouter (OpenRouter is
+#  OpenAI-compatible, so use provider "openai" + its base_url). NOTE: a remote embedder
+#  sends memory text off the box (the default local embedder does not). 1536-dim model →
+#  changing the embedder on an existing bank needs a re-embed/reset.
+# hindsight_embeddings:
+#   provider: "openai"
+#   api_key: "REPLACE_ME"                    # OpenRouter key (or a real OpenAI key)
+#   model: "openai/text-embedding-3-small"
+#   base_url: "https://openrouter.ai/api/v1"
+#
+#  Embedder — LOCAL multilingual example (stays on the box; best for mixed-language banks
+#  like TR+EN). The onnx params don't fit the model/key/url shape, so set them raw via
+#  hindsight_extra_env and leave hindsight_embeddings unset:
+# hindsight_extra_env:
+#   HINDSIGHT_API_EMBEDDINGS_PROVIDER: "onnx"
+#   HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID: "intfloat/multilingual-e5-small"
+#   HINDSIGHT_API_EMBEDDINGS_ONNX_DIMENSIONS: "384"
+#   HINDSIGHT_API_EMBEDDINGS_ONNX_MAX_TOKENS: "512"
+#   HINDSIGHT_API_EMBEDDINGS_ONNX_QUERY_PREFIX: "query: "
+#   HINDSIGHT_API_EMBEDDINGS_ONNX_PASSAGE_PREFIX: "passage: "
+#
+#  Reranker (optional; off by default) — e.g. Cohere:
+# hindsight_reranker:
+#   provider: "cohere"
+#   api_key: "REPLACE_ME"
+#   model: "rerank-v3.5"
+#   base_url: ""
+#   max_candidates: 120
+#
+#  Search backends (optional) — pgroonga handles mixed-script lexical search well:
+# hindsight_text_search_extension: "pgroonga"
+# hindsight_vector_extension: "pgvector"
 #  Base port for the per-profile local daemon (loopback). Each profile gets base+index
 #  (9077, 9078, …) so multiple profiles don't collide. Single profile stays on 9077.
 # hindsight_base_port: 9077
