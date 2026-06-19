@@ -235,6 +235,23 @@ reach the URL (`curl .../health`).
   (same shared keys, `retainTags` source:codex). The user must approve the one-time
   **hook-trust** prompt on the next Codex session. (For a STANDARD Codex CLI, just run
   the official installer and set `~/.hindsight/codex.json` — no plugin needed.)
+  - **Mid-turn knowledge tools (`agent_knowledge_*`) for Codex:** the plugin above is
+    HOOKS-ONLY (auto recall/retain) — it does NOT give the agent the on-demand memory
+    tools. Codex supports MCP servers (`[mcp_servers.*]` in `~/.codex/config.toml`), so add
+    Hindsight's MCP server. The official codex plugin's bundled `lib` is OLDER than the
+    Claude Code plugin's `mcp_server.py` (its `HindsightClient` lacks `request`/`retain` and
+    the `request_timeout_override` arg), so DON'T import the codex lib — **vendor** the CC
+    plugin's matched files into a separate dir, e.g. `<codex-plugin>/mcp/`: copy
+    `scripts/mcp_server.py`, `scripts/run_mcp.sh`, `scripts/lib/`, and `requirements.txt`
+    from `~/.claude/plugins/cache/hindsight/hindsight-memory/<ver>/`, then patch the vendored
+    `lib/config.py` so `user_config_path` reads `~/.hindsight/codex.json` (not
+    `claude-code.json`) → bankId resolves to the shared bank. Register it:
+    `[mcp_servers.hindsight]` `command="bash"`, `args=["…/mcp/scripts/run_mcp.sh"]`,
+    `enabled=true`, `startup_timeout_ms=60000`, and `[mcp_servers.hindsight.env]`
+    `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` → the `mcp/` dir. Needs `enableKnowledgeTools:true`
+    in `codex.json` (mcp_server.py no-ops otherwise). Pre-warm once (first run pip-installs
+    `mcp` into a venv under `CLAUDE_PLUGIN_DATA`); verify with `codex mcp list` (server
+    `hindsight`, enabled) and an stdio `tools/list` (9 `agent_knowledge_*` tools).
 
 - **Hermes Agent:** `hermes memory setup hindsight` → mode **`local_external`**,
   api_url `http://127.0.0.1:9077` (if Hermes runs ON the box) or the served URL
