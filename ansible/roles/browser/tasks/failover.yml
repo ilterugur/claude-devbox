@@ -1,3 +1,25 @@
+- name: Install HAProxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+    update_cache: true
+
+- name: Deploy the CDP failover HAProxy config
+  ansible.builtin.template:
+    src: haproxy-cdp.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "haproxy -c -f %s"
+  notify: Reload haproxy
+
+- name: Enable and start HAProxy
+  ansible.builtin.systemd_service:
+    name: haproxy
+    enabled: true
+    state: started
+
 - name: Deploy fallback headless Chrome unit
   ansible.builtin.template:
     src: devbox-fallback-chrome.service.j2
