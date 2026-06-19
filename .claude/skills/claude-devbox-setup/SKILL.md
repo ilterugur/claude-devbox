@@ -315,7 +315,7 @@ enabled. Save as `~/Library/LaunchAgents/com.devbox.agent-chrome.plist`:
     <string>/Applications/Google Chrome.app/Contents/MacOS/Google Chrome</string>
     <string>--remote-debugging-port=9222</string>
     <string>--remote-allow-origins=*</string>
-    <string>--user-data-dir=/Users/<operator>/agent-chrome-profile</string>
+    <string>--user-data-dir=/Users/[operator]/agent-chrome-profile</string>
     <string>--no-first-run</string>
     <string>--no-default-browser-check</string>
   </array>
@@ -373,7 +373,7 @@ Then create `~/Library/LaunchAgents/com.devbox.cdp-tunnel.plist`:
     <string>ExitOnForwardFailure=yes</string>
     <string>-R</string>
     <string>127.0.0.1:9322:localhost:9222</string>
-    <string><operator>@<box>.<tailnet>.ts.net</string>
+    <string>[operator]@[box].[tailnet].ts.net</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
