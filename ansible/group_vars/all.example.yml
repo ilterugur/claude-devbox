@@ -175,19 +175,20 @@ hindsight_llm_base_url: ""                  # optional custom OpenAI-compatible 
 # hindsight_retain_llm: {}
 # hindsight_consolidation_llm: {}
 #
-#  Embedder — REMOTE example: OpenAI text-embedding-3-small via OpenRouter (OpenRouter is
-#  OpenAI-compatible, so use provider "openai" + its base_url). NOTE: a remote embedder
-#  sends memory text off the box (the default local embedder does not). 1536-dim model →
-#  changing the embedder on an existing bank needs a re-embed/reset.
+#  Embedder — REMOTE example: text-embedding-3-small via OpenRouter's NATIVE embeddings
+#  provider (Hindsight has a first-class "openrouter" provider — no base_url needed; reuse
+#  your OpenRouter key). NOTE: a remote embedder sends memory text off the box (the default
+#  local embedder does not). 1536-dim → changing the embedder on an existing bank needs a
+#  re-embed/reset. For STRONGER Turkish, swap the model for "cohere/embed-v4.0" (also on
+#  OpenRouter, multilingual-first).
 # hindsight_embeddings:
-#   provider: "openai"
-#   api_key: "REPLACE_ME"                    # OpenRouter key (or a real OpenAI key)
+#   provider: "openrouter"
+#   api_key: "REPLACE_ME"                    # your OpenRouter sk-or-... key
 #   model: "openai/text-embedding-3-small"
-#   base_url: "https://openrouter.ai/api/v1"
 #
-#  Embedder — LOCAL multilingual example (stays on the box; best for mixed-language banks
-#  like TR+EN). The onnx params don't fit the model/key/url shape, so set them raw via
-#  hindsight_extra_env and leave hindsight_embeddings unset:
+#  Embedder — LOCAL multilingual alternative (stays on the box; free; good for mixed TR+EN).
+#  The onnx params don't fit the model/key/url shape, so set them raw via hindsight_extra_env
+#  and leave hindsight_embeddings unset:
 # hindsight_extra_env:
 #   HINDSIGHT_API_EMBEDDINGS_PROVIDER: "onnx"
 #   HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID: "intfloat/multilingual-e5-small"
@@ -196,12 +197,14 @@ hindsight_llm_base_url: ""                  # optional custom OpenAI-compatible 
 #   HINDSIGHT_API_EMBEDDINGS_ONNX_QUERY_PREFIX: "query: "
 #   HINDSIGHT_API_EMBEDDINGS_ONNX_PASSAGE_PREFIX: "passage: "
 #
-#  Reranker (optional; off by default) — e.g. Cohere:
+#  Reranker (optional; off by default) — OpenRouter serves rerankers too (POST /api/v1/rerank),
+#  so the same key reranks recall candidates. cohere/rerank-v3.5 is multilingual (100+ langs,
+#  Turkish). Other multilingual options: provider "siliconflow" (BAAI/bge-reranker-v2-m3, cheap)
+#  or "cohere"/"alibaba"/"google" with their own keys.
 # hindsight_reranker:
-#   provider: "cohere"
-#   api_key: "REPLACE_ME"
-#   model: "rerank-v3.5"
-#   base_url: ""
+#   provider: "openrouter"
+#   api_key: "REPLACE_ME"                    # same OpenRouter key
+#   model: "cohere/rerank-v3.5"
 #   max_candidates: 120
 #
 #  Search backends (optional) — pgroonga handles mixed-script lexical search well:

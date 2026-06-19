@@ -195,20 +195,22 @@ re-read the env until restarted.
 
 The `embeddings`/`reranker` keys are **provider-scoped** — Hindsight reads
 `HINDSIGHT_API_EMBEDDINGS_<PROVIDER>_MODEL` (etc.), so the template emits the provider name
-in the key. This fits the OpenAI-compatible / Cohere / Google shape (model + key + base_url).
-OpenRouter is OpenAI-compatible, so use `provider: openai` with its `base_url`. Providers
-with a different parameter shape — notably the **local `onnx`** embedder
-(`HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID`, `_DIMENSIONS`, `_QUERY_PREFIX`, …) — don't fit
-that pattern; set those raw via `hindsight_extra_env`.
+in the key. Hindsight ships first-class providers for both: embeddings via `local`, `onnx`,
+`openai`, `openrouter`, `cohere`, `google`, `zeroentropy`, `tei`, `litellm`, `vertexai`;
+rerankers via `local`, `cohere`, `openrouter`, `siliconflow`, `alibaba`, `google`,
+`zeroentropy`, `jina-mlx`, `litellm`, `rrf`. **OpenRouter serves both** embeddings and
+rerankers (`POST /api/v1/rerank`), so one OpenRouter key can drive the LLM, the embedder,
+and the reranker. Providers with a different parameter shape — notably the **local `onnx`**
+embedder (`HINDSIGHT_API_EMBEDDINGS_ONNX_MODEL_ID`, `_DIMENSIONS`, `_QUERY_PREFIX`, …) —
+don't fit the model/key/url pattern; set those raw via `hindsight_extra_env`.
 
-**Example — OpenAI `text-embedding-3-small` via OpenRouter** (remote embedder):
+**Example — `text-embedding-3-small` via OpenRouter's native embeddings provider:**
 
 ```yaml
 hindsight_embeddings:
-  provider: openai
-  api_key: "sk-or-..."                      # OpenRouter key (or a real OpenAI key)
+  provider: openrouter
+  api_key: "sk-or-..."                      # your OpenRouter key
   model: "openai/text-embedding-3-small"
-  base_url: "https://openrouter.ai/api/v1"
 ```
 
 **Example — local multilingual embedder** (stays on the box; good for mixed TR+EN banks):
@@ -222,13 +224,14 @@ hindsight_extra_env:
   HINDSIGHT_API_EMBEDDINGS_ONNX_PASSAGE_PREFIX: "passage: "
 ```
 
-**Example — Cohere reranker:**
+**Example — reranker via OpenRouter** (same key; `cohere/rerank-v3.5` is multilingual,
+Turkish included):
 
 ```yaml
 hindsight_reranker:
-  provider: cohere
-  api_key: "..."
-  model: "rerank-v3.5"
+  provider: openrouter
+  api_key: "sk-or-..."
+  model: "cohere/rerank-v3.5"
   max_candidates: 120
 ```
 
