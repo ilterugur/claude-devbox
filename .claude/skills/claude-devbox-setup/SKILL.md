@@ -271,6 +271,158 @@ logs, transient detail) — set centrally in the role's `defaults/main.yml`
 repo to "test" hooks — the agent can edit/commit files unprompted. Test with a
 disposable cwd, and clean up any test memories via the control plane.
 
+## Remote browser failover — client wiring
+
+The `browser` role can optionally expose a **CDP (Chrome DevTools Protocol) failover
+endpoint** so the box's browser MCPs (`mcp__Claude_in_Chrome__*`,
+`mcp__Claude_Preview__*`) attach to the operator's **client browser** when online —
+residential IP, isolated profile, observable — and fall back to a server-side headless
+Chrome when offline.
+
+### Step 1 — Enable server side
+
+In `ansible/group_vars/all.yml` set:
+
+```yaml
+browser_remote_failover: true
+```
+
+Then re-run the playbook with the `browser` tag:
+
+```bash
+cd $REPO/ansible && ansible-playbook playbook.yml --tags browser
+```
+
+This provisions a HAProxy load-balancer on the box that listens on port 9222, checks
+the `client` pool (reverse-tunnelled client browser on `127.0.0.1:9322`) first, and
+falls back to a local headless Chrome on `127.0.0.1:9422`.
+
+### Step 2 — Client: isolated Chrome profile (macOS launchd agent)
+
+Create a launchd agent that starts an **isolated** Chrome profile with remote debugging
+enabled. Save as `~/Library/LaunchAgents/com.devbox.agent-chrome.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.devbox.agent-chrome</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/Google Chrome.app/Contents/MacOS/Google Chrome</string>
+    <string>--remote-debugging-port=9222</string>
+    <string>--remote-allow-origins=*</string>
+    <string>--user-data-dir=/Users/<operator>/agent-chrome-profile</string>
+    <string>--no-first-run</string>
+    <string>--no-default-browser-check</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>
+```
+
+Replace `<operator>` with your macOS username. The `--user-data-dir` path must be
+absolute (launchd does not expand `$HOME`).
+
+> **Security — use low-stakes accounts only.** The agent has full programmatic control
+> of whatever is logged into this profile. Prompt injection is an unsolved risk in
+> agentic workflows: a malicious page or document could instruct the agent to act on
+> any account open in the browser. Community best practice: **log only low-stakes
+> accounts into the agent profile** — never banking, primary email, or anything with
+> sensitive personal data. Keep agent tasks low-stakes. The isolated `--user-data-dir`
+> ensures the agent profile is completely separate from your main browser session.
+
+**KeepAlive caveat:** if you quit Chrome from the Dock, launchd will relaunch it
+automatically. To stop the agent browser, bootout the agent (see Step 4).
+
+### Step 3 — Client: SSH reverse tunnel (macOS launchd agent)
+
+First add the box's host key to avoid interactive prompts:
+
+```bash
+ssh-keyscan -T 8 <box>.<tailnet>.ts.net >> ~/.ssh/known_hosts
+```
+
+Then create `~/Library/LaunchAgents/com.devbox.cdp-tunnel.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.devbox.cdp-tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-o</string>
+    <string>BatchMode=yes</string>
+    <string>-o</string>
+    <string>ServerAliveInterval=15</string>
+    <string>-o</string>
+    <string>ServerAliveCountMax=3</string>
+    <string>-o</string>
+    <string>ExitOnForwardFailure=yes</string>
+    <string>-R</string>
+    <string>127.0.0.1:9322:localhost:9222</string>
+    <string><operator>@<box>.<tailnet>.ts.net</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>
+```
+
+Replace `<operator>` with the operator username and `<box>.<tailnet>.ts.net` with your
+box's Tailscale hostname. The tunnel forwards the box's `127.0.0.1:9322` to the
+client's `localhost:9222`, making the client browser reachable from the box.
+
+### Step 4 — Load / unload the agents
+
+Load both agents (takes effect immediately, persists across reboots):
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.devbox.agent-chrome.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.devbox.cdp-tunnel.plist
+```
+
+To disable (stops the process and removes from boot):
+
+```bash
+launchctl bootout gui/$(id -u)/com.devbox.agent-chrome
+launchctl bootout gui/$(id -u)/com.devbox.cdp-tunnel
+```
+
+### Step 5 — Verify
+
+From the box, check which backend is active:
+
+```bash
+# When client Mac is online and tunnel is up → returns client browser build info
+curl -sS http://127.0.0.1:9222/json/version
+
+# When client is offline → returns the server-side headless Chrome build info
+curl -sS http://127.0.0.1:9222/json/version
+```
+
+Confirm HAProxy sees the client pool as healthy:
+
+```bash
+journalctl -u haproxy | grep cdp_pool
+# Healthy: cdp_pool/client is UP
+# Offline: cdp_pool/client is DOWN — falling back to local headless
+```
+
 ## Secrets & safety (non-negotiable)
 
 - `inventory.ini` and `group_vars/all.yml` hold the Tailscale key and other secrets
