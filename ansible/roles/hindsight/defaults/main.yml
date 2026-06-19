@@ -51,3 +51,22 @@ hindsight_observations_mission: >-
   observations from skill/framework/tool documentation, git/test/task-progress logs,
   transient errors, or session summaries. Keep one canonical observation per fact — do
   not restate the same fact in multiple phrasings or languages.
+
+# Entity-label auto-tagging: the extractor classifies each memory from its CONTENT and
+# writes a filterable tag. Content-derived, so it works across ALL clients (Claude Code,
+# Codex, AND Hermes) — not just cwd-aware ones. `tag: true` makes the label a filterable
+# tag (recall with tags=["project:<name>"]). NOTE: the daemon caches the labels schema,
+# so a daemon restart is needed for changes to take effect. Override/extend in all.yml.
+hindsight_entity_labels:
+  - key: project
+    description: >-
+      The project or git repository the fact concerns. Use the canonical repository name;
+      leave empty when the fact is not project-specific.
+    type: text
+    tag: true
+    values: []
+
+# Consolidation dedup similarity threshold (HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD):
+# lower = merge near-duplicate observations more aggressively (1.0 = off). Default 0.97;
+# 0.90 collapses paraphrase duplicates. Daemon-global (set on the embed profile env).
+hindsight_dedup_threshold: "0.90"

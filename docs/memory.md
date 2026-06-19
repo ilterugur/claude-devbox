@@ -202,6 +202,8 @@ These live in the role's `defaults/main.yml` and are overridable in `group_vars/
 | `hindsight_bank_mission` | `claude-code.json` (`bankMission`) → bank `reflect_mission` | the bank's persona when surfacing memory |
 | `hindsight_observations_mission` | daemon HTTP API (`PATCH …/config`), best-effort task | what consolidation turns into long-term observations; also enforces "one canonical fact" to fight TR/EN duplicate paraphrases |
 | `hindsight_retain_every_n_turns` | `claude-code.json` (`retainEveryNTurns`) | how often a session flushes a retain (higher = fewer, less noisy writes) |
+| `hindsight_entity_labels` | daemon HTTP API (`PATCH …/config`), best-effort task | **entity-label auto-tagging** — the extractor classifies each memory from its content and writes a filterable tag (default: a `project:<name>` tag). Content-derived, so it works across **all** clients incl. Hermes (not just cwd-aware ones). Needs a daemon restart to take effect (the labels schema is cached). |
+| `hindsight_dedup_threshold` | embed profile env (`HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD`), best-effort task | consolidation dedup similarity (lower = merge near-duplicates more aggressively, 1.0 = off; default 0.90). Dedup only compares within the same tag scope. |
 
 `observations_mission` isn't a plugin config key, so the role sets it directly on the
 bank via the daemon API — a **best-effort** task that no-ops when the daemon is down

@@ -45,7 +45,7 @@
 # directly on the bank via the daemon's HTTP API. Best-effort: the daemon isn't running
 # at provision time, so this no-ops then and converges on any later run while a session
 # (and thus the daemon) is up. Skipped in per-project mode (each project = its own bank).
-- name: Apply the bank observations_mission via the Hindsight daemon (best-effort)
+- name: Apply bank observations_mission + entity-label auto-tagging via the daemon (best-effort)
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ (hindsight_base_port | default(9077)) + idx }}/v1/default/banks/{{ item.user }}/config"
     method: PATCH
@@ -53,6 +53,8 @@
     body:
       updates:
         observations_mission: "{{ hindsight_observations_mission }}"
+        entity_labels: "{{ hindsight_entity_labels }}"
+        entities_allow_free_form: true
     status_code: [200, 201]
     timeout: 15
   become_user: "{{ item.user }}"
@@ -62,6 +64,23 @@
     index_var: idx
   when: not (hindsight_per_project | default(false))
   failed_when: false
+
+# Daemon-global consolidation dedup threshold (not a bank-config key, not forwarded by the
+# plugin) — set it on the embed daemon profile env. Best-effort: needs the embed profile to
+# exist (created on first session); no-ops otherwise and converges on a later run.
+- name: Set the Hindsight consolidation dedup threshold on the daemon profile (best-effort)
+  ansible.builtin.command:
+    cmd: >-
+      uvx hindsight-embed -p claude-code profile set-env claude-code
+      HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD {{ hindsight_dedup_threshold | default('0.90') }}
+  become_user: "{{ item.user }}"
+  environment:
+    HOME: "/home/{{ item.user }}"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  failed_when: false
+  changed_when: false
   changed_when: false
 
 - name: Source the Hindsight env file from each profile's interactive shell
