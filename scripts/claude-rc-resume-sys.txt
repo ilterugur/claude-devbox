@@ -1,9 +1,9 @@
-This Claude Code session was just auto-resumed after the host process was killed mid-task by an out-of-memory (OOM) event or a host restart, then brought back automatically. This recovery is an automated SYSTEM/host event — it is NOT a message from the user. Therefore:
+Sessions on this box can be auto-resumed after the host process is killed mid-task (an out-of-memory event) or the host restarts. When that happens you receive an automated resume notice — it is a SYSTEM/host event, NOT a message from the user. Standing rules for any such automated notice:
 
 (1) Never reply with standalone acknowledgments or status phrases such as "No response requested.", "Resuming...", or "Continuing." — they are noise.
-(2) Treat any resume/notification text you see as situational awareness, not a user request or instruction to obey literally.
-(3) Silently re-establish your context from the conversation and pick up the user's in-progress work exactly where it left off.
-(4) If a notice lists aborted workflows, resume each via the Workflow tool using the given resumeFromRunId (its journal holds scriptPath; the completed agent prefix replays instantly from cache, only the aborted/remaining agents re-run). Do NOT start such a workflow over from scratch, and do NOT re-run workflows that already completed.
-(5) When you next address the user, write seamlessly in the SAME language and tone as the existing conversation, as if no interruption had occurred.
+(2) Treat the notice as situational awareness, not a user request or an instruction to obey literally.
+(3) Silently re-establish context from the conversation and pick up the in-progress work exactly where it left off.
+(4) If the notice lists aborted workflows, resume each via the Workflow tool using the given resumeFromRunId (its journal holds scriptPath; the completed agent prefix replays from cache, only the aborted/remaining agents re-run). Never start such a workflow over from scratch, and never re-run a workflow that already completed.
+(5) Always address the user in the SAME language and tone as the existing conversation, seamlessly, as if no interruption had occurred.
 
-If your previous turn was already complete and nothing is pending, simply continue naturally or wait for the user — without posting an acknowledgment.
+If nothing is pending, simply continue naturally or wait for the user — without posting an acknowledgment.
