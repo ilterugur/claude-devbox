@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Managed by claude-devbox. Boot/recovery orchestrator for one RC instance.
+#
+# After the Remote Control service comes up, scan this project's worktrees for
+# sessions interrupted by a host crash/OOM and bring each one back: resumed from
+# disk (full conversation), re-registered on the phone, and — for sessions that
+# were running a Workflow when killed — instructed to resume that workflow from
+# its on-disk journal (cached agents replay; only the aborted tail re-runs).
+# Completed workflows are never re-run.
+#
+# Safe by design: idempotent (skips sessions already running), throttled (at most
+# RC_RESUME_MAX_CONCURRENT brought up at once, with a settle delay + memory gate),
+# and quarantined (a session that keeps crashing the box is skipped after
+# RC_RESUME_MAX_ATTEMPTS within an hour, to avoid an OOM-restart loop).
+#
+# Reads worktrees + transcripts; never modifies them.
+#
+# Usage: claude-rc-resume <user>-<project>
+# Env (from the systemd unit): HOME, CLAUDE_RC_PROJECT_DIR, CLAUDE_RC_NAME,
+#   RC_RESUME_LOOKBACK_H, RC_RESUME_MAX_CONCURRENT, RC_RESUME_SETTLE_SEC,
+#   RC_RESUME_MAX_ATTEMPTS, RC_RESUME_MIN_FREE_MB
+set -uo pipefail
+
+ID="${1:?instance id (<user>-<project>) required}"
+SOCKET="claude-rc-${ID}"
+DIR="${CLAUDE_RC_PROJECT_DIR:?CLAUDE_RC_PROJECT_DIR not set}"
+PROJECT_NAME="${CLAUDE_RC_NAME:-${ID}}"
+
+LOOKBACK_H="${RC_RESUME_LOOKBACK_H:-12}"
+MAX_CONCURRENT="${RC_RESUME_MAX_CONCURRENT:-2}"
+SETTLE_SEC="${RC_RESUME_SETTLE_SEC:-20}"
+MAX_ATTEMPTS="${RC_RESUME_MAX_ATTEMPTS:-3}"
+MIN_FREE_MB="${RC_RESUME_MIN_FREE_MB:-1200}"
+SETTLE_MAX_SEC="${RC_RESUME_SETTLE_MAX_SEC:-180}"
+
+SCAN="/usr/local/bin/claude-rc-resume-scan"
+EXEC="/usr/local/bin/claude-rc-resume-exec"
+SYSFILE="/usr/local/share/claude-devbox/claude-rc-resume-sys.txt"
+RUNDIR="${HOME}/.cache/claude-devbox/resume"
+STATE="${RUNDIR}/attempts.json"
+mkdir -p "${RUNDIR}"
+
+log() { echo "[claude-rc-resume] $*" >&2; }
+
+export PATH="${HOME}/.local/bin:${PATH}"
+command -v mise >/dev/null 2>&1 && eval "$(mise activate bash --shims)" || true
+PYBIN="$(command -v python3 || echo python3)"
+
+# Wait for the RC tmux session to be ready (the service may still be registering).
+for _ in $(seq 1 60); do
+  tmux -L "${SOCKET}" has-session -t "${SOCKET}" 2>/dev/null && break
+  sleep 2
+done
+tmux -L "${SOCKET}" has-session -t "${SOCKET}" 2>/dev/null || { log "RC tmux not up; nothing to resume"; exit 0; }
+sleep "${SETTLE_SEC}"
+
+PLAN="$("${PYBIN}" "${SCAN}" "${DIR}" "${LOOKBACK_H}" 2>/dev/null || echo '[]')"
+[ "${PLAN}" = "[]" ] && { log "no interrupted sessions in last ${LOOKBACK_H}h"; exit 0; }
+
+# Planner: read the scan plan + attempt state, write per-session name/notice files,
+# apply the quarantine cap, and emit a launch list (one TSV line per session:
+# uuid <TAB> perm <TAB> namefile <TAB> noticefile <TAB> worktree).
+LAUNCH_TSV="$(
+  RC_PLAN="${PLAN}" RC_RUNDIR="${RUNDIR}" RC_STATE="${STATE}" \
+  RC_MAX_ATTEMPTS="${MAX_ATTEMPTS}" RC_PROJECT="${PROJECT_NAME}" \
+  "${PYBIN}" - <<'PY'
+import os, json, time
+plan = json.loads(os.environ["RC_PLAN"])
+rundir = os.environ["RC_RUNDIR"]; statef = os.environ["RC_STATE"]
+maxatt = int(os.environ["RC_MAX_ATTEMPTS"]); project = os.environ["RC_PROJECT"]
+now = time.time()
+try:
+    state = json.load(open(statef))
+except Exception:
+    state = {}
+
+out = []
+for p in plan:
+    uuid = p["uuid"]; wt = p["worktree"]; perm = p["permissionMode"]
+    kw = p.get("killedWorkflows") or []
+    st = state.get(uuid, {"count": 0, "last": 0})
+    # reset the counter if the last attempt was long ago (a fresh crash, not a loop)
+    if now - st.get("last", 0) > 3600:
+        st["count"] = 0
+    if st["count"] >= maxatt:
+        print(f"# quarantined {uuid} ({st['count']} attempts in <1h) — skipping", flush=True)
+        continue
+    st["count"] += 1; st["last"] = now
+    state[uuid] = st
+
+    # human-readable name shown on the phone
+    if kw:
+        name = kw[0]["name"] or f"{project} resume"
+    else:
+        name = f"{project} · {uuid[:8]}"
+
+    # per-session resume notice (system-framed); only mentions workflows that are
+    # genuinely unfinished, so the agent never re-runs completed ones.
+    if kw:
+        wl = "; ".join(f'{w["name"]} resumeFromRunId="{w["runId"]}"' for w in kw)
+        notice = ("[automated resume notice — system, not the user] The host OOM-killed this run "
+                  "and it was restarted. Per your resume-context system guidance, resume the aborted "
+                  f"workflow(s) now via the Workflow tool: {wl}. The completed agent prefix replays "
+                  "from cache; only the aborted/remaining agents re-run. Do not re-run any workflow "
+                  "that already finished. Then continue the user's work to completion, seamlessly, in "
+                  "the conversation's language.")
+    else:
+        notice = ("[automated resume notice — system, not the user] The host OOM-killed this run and it "
+                  "was restarted. Per your resume-context system guidance, silently continue any unfinished "
+                  "work where it left off; if your last turn was already complete, just continue naturally or "
+                  "wait for the user. Do not post a bare acknowledgment.")
+
+    nf = os.path.join(rundir, uuid + ".name")
+    cf = os.path.join(rundir, uuid + ".notice")
+    open(nf, "w").write(name)
+    open(cf, "w").write(notice)
+    out.append("\t".join([uuid, perm, nf, cf, wt]))
+
+json.dump(state, open(statef, "w"), indent=2)
+for line in out:
+    print(line)
+PY
+)"
+
+launched=0
+while IFS=$'\t' read -r uuid perm namefile noticefile worktree; do
+  [ -z "${uuid:-}" ] && continue
+  case "${uuid}" in \#*) log "${uuid} ${perm}"; continue;; esac
+
+  # idempotency: never double-resume a session that is already running
+  if pgrep -f "claude --resume ${uuid}" >/dev/null 2>&1; then
+    log "already running: ${uuid}"; continue
+  fi
+
+  win="resume:$(basename "${namefile}" .name | cut -c1-8)"
+  tmux -L "${SOCKET}" new-window -t "${SOCKET}:" -n "${win}" \
+    "${EXEC} ${uuid} ${perm} ${worktree} ${namefile} ${noticefile} ${SYSFILE}"
+  launched=$((launched + 1))
+  log "launched ${uuid} (perm=${perm})"
+
+  # throttle: settle, then wait for memory + concurrency headroom before the next
+  sleep "${SETTLE_SEC}"
+  waited=0
+  while :; do
+    running="$(pgrep -fc 'claude --resume' 2>/dev/null || echo 0)"
+    free_mb="$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')"; free_mb="${free_mb:-9999}"
+    { [ "${running}" -lt "${MAX_CONCURRENT}" ] && [ "${free_mb}" -ge "${MIN_FREE_MB}" ]; } && break
+    [ "${waited}" -ge "${SETTLE_MAX_SEC}" ] && { log "settle timeout (running=${running} free=${free_mb}MB) — proceeding"; break; }
+    sleep 5; waited=$((waited + 5))
+  done
+done <<< "${LAUNCH_TSV}"
+
+log "done — ${launched} session(s) resumed for ${ID}"
+exit 0

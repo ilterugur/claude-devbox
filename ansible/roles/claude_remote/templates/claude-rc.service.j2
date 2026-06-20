@@ -2,14 +2,39 @@
 {# Merge global rc_limits / rc_build_env defaults with per-server overrides. #}
 {% set L = (rc_limits | default({})) | combine(item.1.limits | default({})) %}
 {% set BENV = (rc_build_env | default({})) | combine(item.1.build_env | default({})) %}
+{% set ID = item.0.user ~ '-' ~ item.1.project %}
 [Unit]
-Description=Claude remote-control ({{ item.0.user }}-{{ item.1.project }})
+Description=Claude remote-control ({{ ID }})
 After=network-online.target tailscaled.service
 Wants=network-online.target
+{% if rc_autorestart | default(true) %}
+{# Cap restart churn: at most rc_start_limit_burst restarts per interval, else give up. #}
+StartLimitIntervalSec={{ rc_start_limit_interval | default(600) }}
+StartLimitBurst={{ rc_start_limit_burst | default(10) }}
+{% endif %}
+{% if rc_resume_on_boot | default(true) %}
+{# Pull the boot/recovery orchestrator after this service starts, so interrupted
+   sessions (and their aborted workflows) are resumed automatically. #}
+Wants=claude-rc-resume-{{ ID }}.service
+{% endif %}
 
 [Service]
+{% if rc_autorestart | default(true) %}
+{# Self-heal: a oneshot+RemainAfterExit unit goes to "failed (oom-kill)" and STAYS
+   down when the cgroup is OOM-killed. Instead we run a blocking monitor as the main
+   process: ExecStartPre spawns the detached tmux server, ExecStart blocks while that
+   session lives and exits non-zero the moment it dies (OOM/kill/crash), so
+   Restart=on-failure brings the whole unit back in RestartSec. #}
+Type=simple
+ExecStartPre=/usr/local/bin/claude-rc-wrapper {{ ID }}
+ExecStart=/usr/local/bin/claude-rc-monitor {{ ID }}
+Restart=on-failure
+RestartSec={{ rc_restart_sec | default(10) }}
+{% else %}
 Type=oneshot
 RemainAfterExit=yes
+ExecStart=/usr/local/bin/claude-rc-wrapper {{ ID }}
+{% endif %}
 User={{ item.0.user }}
 Environment=HOME=/home/{{ item.0.user }}
 Environment=PATH=/home/{{ item.0.user }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -28,8 +53,7 @@ EnvironmentFile=-/home/{{ item.0.user }}/.hindsight/llm.env
 {% for k, v in BENV.items() %}
 Environment="{{ k }}={{ v }}"
 {% endfor %}
-ExecStart=/usr/local/bin/claude-rc-wrapper {{ item.0.user }}-{{ item.1.project }}
-ExecStop=/usr/bin/tmux -L claude-rc-{{ item.0.user }}-{{ item.1.project }} kill-server
+ExecStop=/usr/bin/tmux -L claude-rc-{{ ID }} kill-server
 {# ── Resource control (systemd cgroup) — keep one build from taking the box ── #}
 {% if L.memory_high | default('') %}MemoryHigh={{ L.memory_high }}
 {% endif %}

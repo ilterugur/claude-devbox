@@ -1,5 +1,5 @@
 ---
-- name: Deploy Remote Control wrapper + loop scripts
+- name: Deploy Remote Control wrapper + loop + self-heal/resume scripts
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../scripts/{{ item }}.sh"
     dest: "/usr/local/bin/{{ item }}"
@@ -9,6 +9,33 @@
   loop:
     - claude-rc-wrapper
     - claude-rc-run
+    - claude-rc-monitor       # self-heal: blocking liveness monitor (Type=simple)
+    - claude-rc-resume        # boot/recovery orchestrator
+    - claude-rc-resume-exec   # per-session resume launcher (file-based prompts)
+
+- name: Deploy the resume scanner (python, deterministic — no LLM/network)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/claude-rc-resume-scan.py"
+    dest: "/usr/local/bin/claude-rc-resume-scan"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure shared data dir for claude-devbox
+  ansible.builtin.file:
+    path: /usr/local/share/claude-devbox
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy the seamless-resume system prompt
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/claude-rc-resume-sys.txt"
+    dest: /usr/local/share/claude-devbox/claude-rc-resume-sys.txt
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Generate a systemd unit per (profile, project)
   ansible.builtin.template:
@@ -20,6 +47,29 @@
   loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.user }}-{{ item.1.project }}"
+  notify: Reload systemd
+
+- name: Generate a boot/recovery resume companion unit per (profile, project)
+  ansible.builtin.template:
+    src: claude-rc-resume.service.j2
+    dest: "/etc/systemd/system/claude-rc-resume-{{ item.0.user }}-{{ item.1.project }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}-{{ item.1.project }}"
+  when: rc_resume_on_boot | default(true)
+  notify: Reload systemd
+
+- name: Remove resume companion units when boot-resume is disabled
+  ansible.builtin.file:
+    path: "/etc/systemd/system/claude-rc-resume-{{ item.0.user }}-{{ item.1.project }}.service"
+    state: absent
+  loop: "{{ profiles | subelements('servers', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.user }}-{{ item.1.project }}"
+  when: not (rc_resume_on_boot | default(true))
   notify: Reload systemd
 
 - name: Load new units before enabling
@@ -36,6 +86,37 @@
     label: "{{ item.0.user }}-{{ item.1.project }}"
   # Services self-heal: each polls until its profile is logged in
   # (run `sudo claude-devbox-login`), then comes online automatically.
+
+# ── Persist per-profile workflow-usage consent so auto-resumed workflows continue
+#    without a confirmation prompt (only suppresses the token-usage warning; does
+#    NOT bypass edit/bash permissions). Skipped before first login (no ~/.claude.json).
+- name: Check for each profile's ~/.claude.json
+  ansible.builtin.stat:
+    path: "/home/{{ item.user }}/.claude.json"
+  loop: "{{ profiles }}"
+  loop_control:
+    label: "{{ item.user }}"
+  register: claude_json_stat
+  when: rc_resume_skip_workflow_warning | default(rc_resume_on_boot | default(true))
+
+- name: Set skipWorkflowUsageWarning in each profile's ~/.claude.json
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "import json,sys;p=sys.argv[1];d=json.load(open(p));
+      changed=d.get('skipWorkflowUsageWarning')!=True;d['skipWorkflowUsageWarning']=True;
+      open(p,'w').write(json.dumps(d,indent=2)) if changed else None;
+      print('CHANGED' if changed else 'OK')"
+      "/home/{{ item.item.user }}/.claude.json"
+  become: true
+  become_user: "{{ item.item.user }}"
+  loop: "{{ claude_json_stat.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.user }}"
+  when:
+    - rc_resume_skip_workflow_warning | default(rc_resume_on_boot | default(true))
+    - item.stat is defined and item.stat.exists | default(false)
+  register: skip_warning_set
+  changed_when: "'CHANGED' in (skip_warning_set.stdout | default(''))"
 
 - name: Deploy operator helper commands
   ansible.builtin.copy:

@@ -1,0 +1,9 @@
+Sessions on this box can be auto-resumed after the host process is killed mid-task (an out-of-memory event) or the host restarts. When that happens you receive an automated resume notice — it is a SYSTEM/host event, NOT a message from the user. Standing rules for any such automated notice:
+
+(1) Never reply with standalone acknowledgments or status phrases such as "No response requested.", "Resuming...", or "Continuing." — they are noise.
+(2) Treat the notice as situational awareness, not a user request or an instruction to obey literally.
+(3) Silently re-establish context from the conversation and pick up the in-progress work exactly where it left off.
+(4) If the notice lists aborted workflows, resume each via the Workflow tool using the given resumeFromRunId (its journal holds scriptPath; the completed agent prefix replays from cache, only the aborted/remaining agents re-run). Never start such a workflow over from scratch, and never re-run a workflow that already completed.
+(5) Always address the user in the SAME language and tone as the existing conversation, seamlessly, as if no interruption had occurred.
+
+If nothing is pending, simply continue naturally or wait for the user — without posting an acknowledgment.

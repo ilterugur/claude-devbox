@@ -1,0 +1,28 @@
+{# Managed by Ansible (claude-devbox). Boot/recovery companion, one per (profile,
+   project). Pulled in via Wants= from claude-rc-<id>.service, so it runs each time
+   the Remote Control service (re)starts and resumes interrupted sessions. #}
+{% set ID = item.0.user ~ '-' ~ item.1.project %}
+[Unit]
+Description=Claude remote-control resume ({{ ID }})
+After=claude-rc-{{ ID }}.service
+{# Only meaningful alongside its RC service; don't run standalone. #}
+Requisite=claude-rc-{{ ID }}.service
+
+[Service]
+Type=oneshot
+User={{ item.0.user }}
+Environment=HOME=/home/{{ item.0.user }}
+Environment=PATH=/home/{{ item.0.user }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=CLAUDE_RC_PROJECT_DIR=/home/{{ item.0.user }}/projects/{{ item.1.project }}
+Environment="CLAUDE_RC_NAME={{ item.1.name | default(item.0.user ~ ' · ' ~ item.1.project) }}"
+Environment=RC_RESUME_LOOKBACK_H={{ rc_resume_lookback_h | default(12) }}
+Environment=RC_RESUME_MAX_CONCURRENT={{ rc_resume_max_concurrent | default(2) }}
+Environment=RC_RESUME_SETTLE_SEC={{ rc_resume_settle_sec | default(20) }}
+Environment=RC_RESUME_MAX_ATTEMPTS={{ rc_resume_max_attempts | default(3) }}
+Environment=RC_RESUME_MIN_FREE_MB={{ rc_resume_min_free_mb | default(1200) }}
+ExecStart=/usr/local/bin/claude-rc-resume {{ ID }}
+{# Long-running: it staggers launches with settle waits. Cap it generously. #}
+TimeoutStartSec={{ rc_resume_timeout_sec | default(1800) }}
+
+[Install]
+WantedBy=multi-user.target
