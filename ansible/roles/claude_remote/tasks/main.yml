@@ -116,7 +116,10 @@
     - rc_resume_skip_workflow_warning | default(rc_resume_on_boot | default(true)) | bool
     - item.stat is defined and item.stat.exists | default(false)
   register: skip_warning_set
-  changed_when: "'CHANGED' in (skip_warning_set.stdout | default(''))"
+  # In a loop, changed_when is evaluated per item against that item's own result,
+  # so reference the bare `stdout` (skip_warning_set.stdout is the aggregate and is
+  # undefined mid-loop, which would suppress the changed status).
+  changed_when: "'CHANGED' in (stdout | default(''))"
 
 - name: Deploy operator helper commands
   ansible.builtin.copy:
