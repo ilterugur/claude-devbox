@@ -43,6 +43,7 @@ That's it — the servers come online within ~15s of login.
 | Spawn the box from zero with no server running | ❌ | At least one `claude-rc-*` server must be alive — that's what the always-on service guarantees |
 | `claude.ai/code` web "new session" running on the box | ❌ | The web's own new-session runs on **Anthropic cloud**, not your box. Always connect to **your** server. |
 | Dispatch (start tasks from phone) | ❌ here | Dispatch needs the **desktop app** running on a Mac/Windows — useless with the client off |
+| A session survives a box OOM / crash / reboot | ✅ | The server self-heals (systemd auto-restart) and a companion auto-resumes interrupted sessions — and any Workflow they were running — from on-disk state. On by default; see the self-heal/resume block in `group_vars/all.example.yml`. |
 
 ## Caveats
 
@@ -51,6 +52,10 @@ That's it — the servers come online within ~15s of login.
 - A session times out after ~10 min of network loss; the box-side server keeps
   running and you reconnect.
 - Approving tool calls from a phone is easy — don't rubber-stamp risky ones.
+- Auto-resume reconnects a session under a **new** cloud id (the original transcript
+  is loaded into it) and consumes quota as it continues — it does not revive the dead
+  cloud session in place. Workflow resume replays completed agents from cache and
+  re-runs only the aborted tail.
 
 ## Roaming-resilient terminal: mosh + tmux (flaky connections)
 
