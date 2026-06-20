@@ -1,5 +1,18 @@
-import { describe, expect, test } from "bun:test";
-import { addProjectToYaml, addServerToYaml, projectEntry, serverEntry, titleize, toSshUrl } from "./add";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, test } from "bun:test";
+import { addProjectToYaml, addServerToYaml, detectProject, projectEntry, serverEntry, titleize, toSshUrl } from "./add";
+
+/** Make a throwaway git repo with an origin remote; optionally drop a package.json. */
+function makeRepo(withPackageJson: boolean): string {
+  const dir = mkdtempSync(join(tmpdir(), "devbox-add-"));
+  spawnSync("git", ["init", "-q"], { cwd: dir });
+  spawnSync("git", ["remote", "add", "origin", "git@github.com:org/fixture.git"], { cwd: dir });
+  if (withPackageJson) writeFileSync(join(dir, "package.json"), '{"name":"fixture"}\n');
+  return dir;
+}
 
 describe("toSshUrl", () => {
   test("https → git@host:owner/repo.git", () => {
@@ -23,8 +36,10 @@ describe("toSshUrl", () => {
 });
 
 describe("projectEntry", () => {
-  test("6-space indented block matching group_vars, with full schema", () => {
-    expect(projectEntry({ name: "myproj", repo: "git@github.com:org/myproj.git", branch: "main" })).toBe(
+  test("install: true → run `bun install` comment", () => {
+    expect(
+      projectEntry({ name: "myproj", repo: "git@github.com:org/myproj.git", branch: "main", install: true }),
+    ).toBe(
       "      - name: myproj\n" +
         '        repo: "git@github.com:org/myproj.git"\n' +
         "        branch: main\n" +
@@ -32,6 +47,38 @@ describe("projectEntry", () => {
         "        update: false # don't git-pull over Claude's local edits\n" +
         "        ports: []\n",
     );
+  });
+
+  test("install: false → no-package.json comment (toolkit, not a bun project)", () => {
+    expect(
+      projectEntry({ name: "ansible-toolkit", repo: "git@github.com:org/ansible-toolkit.git", branch: "main", install: false }),
+    ).toBe(
+      "      - name: ansible-toolkit\n" +
+        '        repo: "git@github.com:org/ansible-toolkit.git"\n' +
+        "        branch: main\n" +
+        "        install: false # no package.json at repo root — nothing to install\n" +
+        "        update: false # don't git-pull over Claude's local edits\n" +
+        "        ports: []\n",
+    );
+  });
+});
+
+describe("detectProject install auto-detection", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  test("install: true when the repo has a root package.json", () => {
+    const dir = makeRepo(true);
+    dirs.push(dir);
+    expect(detectProject({ cwd: dir }).install).toBe(true);
+  });
+
+  test("install: false when the repo has no root package.json", () => {
+    const dir = makeRepo(false);
+    dirs.push(dir);
+    expect(detectProject({ cwd: dir }).install).toBe(false);
   });
 });
 
@@ -82,7 +129,7 @@ profiles:
         branch: main
 `;
 
-const snippet = projectEntry({ name: "myproj", repo: "git@github.com:org/myproj.git", branch: "main" });
+const snippet = projectEntry({ name: "myproj", repo: "git@github.com:org/myproj.git", branch: "main", install: true });
 
 describe("addProjectToYaml", () => {
   test("inserts at the end of the correct profile's projects, before servers:", () => {

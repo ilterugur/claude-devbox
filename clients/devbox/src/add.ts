@@ -36,9 +36,12 @@ const git = (args: string[], cwd: string): string | null => {
   return r.status === 0 && r.stdout ? r.stdout.trim() : null;
 };
 
-export type Detected = { name: string; repo: string; branch: string };
+export type Detected = { name: string; repo: string; branch: string; install: boolean };
 
-/** Inspect the git repo at `cwd` (default: process.cwd()) to fill name/repo/branch. */
+/** Inspect the git repo at `cwd` (default: process.cwd()) to fill name/repo/branch.
+ *  `install` is auto-detected from a root package.json: a repo without one (an Ansible
+ *  or shell toolkit, e.g. claude-devbox itself) gets `install: false`, so the projects
+ *  role's `bun install` doesn't fail with "could not find a package.json file". */
 export function detectProject(opts: { name?: string; branch?: string; cwd?: string }): Detected {
   const cwd = opts.cwd ?? process.cwd();
   const top = git(["rev-parse", "--show-toplevel"], cwd);
@@ -47,7 +50,8 @@ export function detectProject(opts: { name?: string; branch?: string; cwd?: stri
   if (!origin) die("this repo has no 'origin' remote — add one, or pass the repo url by hand");
   const branch = opts.branch ?? git(["rev-parse", "--abbrev-ref", "HEAD"], cwd) ?? "main";
   const name = opts.name ?? top.split("/").pop()!;
-  return { name, repo: toSshUrl(origin), branch };
+  const install = existsSync(join(top, "package.json"));
+  return { name, repo: toSshUrl(origin), branch, install };
 }
 
 /** The YAML block for one project, indented to match group_vars (6-space list items).
@@ -55,11 +59,14 @@ export function detectProject(opts: { name?: string; branch?: string; cwd?: stri
  *  role, because a missing `update` key makes Jinja's `item.update` resolve to the dict's
  *  built-in .update() method instead of the value. Defaults mirror all.example.yml. */
 export function projectEntry(d: Detected): string {
+  const installLine = d.install
+    ? "        install: true # run `bun install` after clone\n"
+    : "        install: false # no package.json at repo root — nothing to install\n";
   return (
     `      - name: ${d.name}\n` +
     `        repo: "${d.repo}"\n` +
     `        branch: ${d.branch}\n` +
-    `        install: true # run \`bun install\` after clone\n` +
+    installLine +
     `        update: false # don't git-pull over Claude's local edits\n` +
     `        ports: []\n`
   );
