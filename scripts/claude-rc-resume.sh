@@ -133,8 +133,11 @@ while IFS=$'\t' read -r uuid perm namefile noticefile worktree; do
   fi
 
   win="resume:$(basename "${namefile}" .name | cut -c1-8)"
+  # Pass the command as separate argv entries (not one string): tmux execs it
+  # directly without a second shell parse, so on-disk values can't be re-split or
+  # interpreted as shell metacharacters.
   tmux -L "${SOCKET}" new-window -t "${SOCKET}:" -n "${win}" \
-    "${EXEC} ${uuid} ${perm} ${worktree} ${namefile} ${noticefile} ${SYSFILE}"
+    "${EXEC}" "${uuid}" "${perm}" "${worktree}" "${namefile}" "${noticefile}" "${SYSFILE}"
   launched=$((launched + 1))
   log "launched ${uuid} (perm=${perm})"
 
