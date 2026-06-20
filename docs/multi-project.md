@@ -41,8 +41,9 @@ profile is automatic — no SSH host-aliases or `includeIf` gymnastics:
 
 ## Projects
 
-Cloned into `/home/<user>/projects/<name>`, `bun install`ed (via mise), and any
-`.env.example` scaffolded to `.env` (you fill in real secrets).
+Cloned into `/home/<user>/projects/<name>`, `bun install`ed (via mise) when the repo
+has a root `package.json` and `install: true`, and any `.env.example` scaffolded to
+`.env` (you fill in real secrets).
 
 ## Remote-control servers
 
@@ -72,7 +73,9 @@ Preview from your client — see [realtime-sync.md](realtime-sync.md).
 `projects:` entry and an always-on Remote Control `servers:` entry into `all.yml`,
 then prints the playbook command (`--tags projects,remote`). Pass `--no-server` for
 a project with no phone-reachable RC service, or tune it with `--server-name`,
-`--spawn`, `--capacity`.
+`--spawn`, `--capacity`. `install:` is auto-detected from a root `package.json` — a
+repo without one (an Ansible/shell toolkit) gets `install: false`, so the clone
+doesn't fail on `bun install`.
 
 **By hand:** edit `all.yml`, re-run the playbook (idempotent + additive). A new
 profile creates the user + SSH key (add it to GitHub); a new `servers` entry brings
