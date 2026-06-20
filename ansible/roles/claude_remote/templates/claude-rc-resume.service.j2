@@ -5,9 +5,10 @@
 [Unit]
 Description=Claude remote-control resume ({{ ID }})
 After=claude-rc-{{ ID }}.service
-{# Triggered from the RC unit's ExecStartPost (--no-block) on every start, while RC
-   is still in its start-post phase (not yet "active"), so no Requisite= here — the
-   orchestrator polls for the RC tmux session to be ready before doing anything. #}
+{# Triggered from the RC unit's ExecStartPost (--no-block) on every start; After=
+   orders this to run once the RC start job completes. No Requisite= — the trigger
+   is best-effort and the orchestrator polls for the RC tmux session before acting,
+   so it degrades gracefully if RC isn't ready yet. #}
 
 [Service]
 Type=oneshot

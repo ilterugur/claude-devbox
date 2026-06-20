@@ -52,11 +52,12 @@ ExecStop=/usr/bin/tmux -L claude-rc-{{ ID }} kill-server
 {% if rc_resume_on_boot | default(true) %}
 {# Trigger the boot/recovery orchestrator on EVERY start — including Restart=
    auto-restarts after an OOM, which do NOT re-pull Wants= dependencies (so a plain
-   Wants= would only fire on a clean `systemctl start`, not on self-heal). The '+'
-   runs it as root (the service runs as the profile user, which can't call
-   systemctl); --no-block returns immediately so it never delays the unit becoming
+   Wants= would only fire on a clean `systemctl start`, not on self-heal). Prefixes:
+   '-' makes it best-effort (a failed trigger must NOT fail/restart the RC unit),
+   '+' runs it as root (the service runs as the profile user, which can't call
+   systemctl). --no-block returns immediately so it never delays the unit becoming
    active, and the companion is idempotent (it skips sessions already running). #}
-ExecStartPost=+/usr/bin/systemctl start --no-block claude-rc-resume-{{ ID }}.service
+ExecStartPost=-+/usr/bin/systemctl start --no-block claude-rc-resume-{{ ID }}.service
 {% endif %}
 {# ── Resource control (systemd cgroup) — keep one build from taking the box ── #}
 {% if L.memory_high | default('') %}MemoryHigh={{ L.memory_high }}
